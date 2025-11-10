@@ -31,6 +31,7 @@ namespace CheckPosition
         private Func<object, string> getStringValue;
         private fSearchReplace searchForm;
         private System.Windows.Forms.NotifyIcon notifyIcon;
+        private ContextMenuStrip notifyContextMenu; // Контекстное меню для иконки в системном трее
         private DateTime LastDateCheck = DateTime.Now.AddDays(-3);
         private String formTitle = "Проверка позиций сайта в поисковой выдаче Яндекс";
         private bool isProcessCheckin = false;
@@ -40,6 +41,15 @@ namespace CheckPosition
         private static readonly TimeSpan periodicCheckInterval = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan staleCheckThreshold = TimeSpan.FromDays(7);
         private const string StatusCheckingText = "идет проверка доменов";
+        private static readonly TimeSpan[] domainCheckRetryDelays = new[] // График повторов проверки доменов с нарастающими задержками
+        {
+            TimeSpan.Zero,
+            TimeSpan.FromMinutes(1),
+            TimeSpan.FromMinutes(2),
+            TimeSpan.FromMinutes(3),
+            TimeSpan.FromMinutes(4),
+            TimeSpan.FromMinutes(5)
+        };
 
         public Form1(string[] args, string title)
         {
@@ -82,9 +92,14 @@ namespace CheckPosition
             using (System.IO.Stream stream = assembly.GetManifestResourceStream("CheckPosition.Resources.favicon.ico"))
             {
                 notifyIcon.Icon = new System.Drawing.Icon(stream);
-            } 
+            }
             notifyIcon.Visible = true;
             notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
+            notifyContextMenu = new ContextMenuStrip(); // Создаем контекстное меню для управления приложением из трея
+            var exitMenuItem = new ToolStripMenuItem("Выход"); // Добавляем пункт выхода
+            exitMenuItem.Click += (sender, e) => mExit_Click(sender, e); // Используем уже существующую логику завершения приложения
+            notifyContextMenu.Items.Add(exitMenuItem); // Регистрируем пункт в меню трея
+            notifyIcon.ContextMenuStrip = notifyContextMenu; // Привязываем меню к иконке в трее
 
             foreach (string arg in args)
                 if (arg == "--intray"){
@@ -143,6 +158,18 @@ namespace CheckPosition
             public int AveragePosition { get; set; }
             public string FoundPageUrl { get; set; }
             public DateTime CheckDate { get; set; }
+        }
+
+        private sealed class DomainCheckExecutionException : Exception // Исключение с дополнительной диагностикой по прерванной проверке
+        {
+            public int SuccessfulCount { get; }
+            public int LastAttemptedIndex { get; }
+
+            public DomainCheckExecutionException(int successfulCount, int lastAttemptedIndex, Exception inner) : base(inner?.Message, inner)
+            {
+                SuccessfulCount = successfulCount;
+                LastAttemptedIndex = lastAttemptedIndex;
+            }
         }
 
         // Запускаем автоматическую проверку строк, устаревших более чем на заданный срок
@@ -212,19 +239,62 @@ namespace CheckPosition
             PrepareUiForCheck(requests.Count);
 
             int successfulCount = 0;
+            bool completedSuccessfully = false;
+            Exception lastError = null;
 
             try
             {
-                var summary = await Task.Run(() => ProcessDomainChecks(requests, triggeredAutomatically, token), token);
-                successfulCount = summary.SuccessfulCount;
+                for (int attempt = 1; attempt <= domainCheckRetryDelays.Length; attempt++)
+                {
+                    try
+                    {
+                        // Запускаем проверку доменов в отдельном потоке, чтобы не блокировать интерфейс
+                        var summary = await Task.Run(() => ProcessDomainChecks(requests, triggeredAutomatically, token), token);
+                        successfulCount = summary.SuccessfulCount;
+                        completedSuccessfully = true;
+                        break;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (DomainCheckExecutionException ex)
+                    {
+                        successfulCount = ex.SuccessfulCount; // Сохраняем количество успешных строк к моменту ошибки
+                        lastError = ex.InnerException ?? ex; // Запоминаем исходную причину сбоя для сообщения пользователю
+                    }
+                    catch (Exception ex)
+                    {
+                        lastError = ex; // Храним последнюю ошибку для последующей обработки
+                    }
+
+                    if (attempt == domainCheckRetryDelays.Length)
+                    {
+                        break; // Завершаем попытки, если достигли лимита
+                    }
+
+                    var delay = domainCheckRetryDelays[attempt];
+                    if (delay > TimeSpan.Zero)
+                    {
+                        // Уведомляем пользователя о повторной попытке с задержкой и ждем указанное время
+                        var delayMinutes = (int)Math.Round(delay.TotalMinutes);
+                        var attemptLabel = $"{attempt + 1}/{domainCheckRetryDelays.Length}"; // Формируем человекочитаемое отображение номера попытки
+                        var retryMessage = $"Ошибка проверки доменов: {lastError?.Message}."; // Готовим сообщение об ошибке для статуса
+                        retryMessage += $" Повторная попытка {attemptLabel} через {delayMinutes} мин."; // Дополняем сообщение сведениями о следующем запуске
+                        UpdateStatusTextSafe(retryMessage);
+                        await Task.Delay(delay, token);
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
                 UpdateStatusTextSafe("Проверка остановлена пользователем");
             }
-            catch (Exception ex)
+
+            if (!completedSuccessfully && lastError != null)
             {
-                HandleDomainCheckError(triggeredAutomatically, ex);
+                // Сообщаем пользователю о неудавшейся проверке после всех повторов
+                HandleDomainCheckError(triggeredAutomatically, lastError);
             }
             finally
             {
@@ -260,8 +330,7 @@ namespace CheckPosition
                 }
                 catch (Exception ex)
                 {
-                    HandleDomainCheckError(triggeredAutomatically, ex);
-                    break;
+                    throw new DomainCheckExecutionException(successfulCount, lastAttemptedIndex, ex); // Прерываем обработку, сохранив статистику по выполненным строкам
                 }
             }
 
@@ -412,18 +481,21 @@ namespace CheckPosition
             string message = ex?.Message ?? "Неизвестная ошибка";
             if (triggeredAutomatically)
             {
-                UpdateStatusTextSafe($"Ошибка проверки доменов: {message}");
+                UpdateStatusTextSafe($"Ошибка проверки доменов: {message}"); // Обновляем строку состояния при автоматическом запуске
+            }
+
+            void ShowErrorMessage()
+            {
+                MessageBox.Show($"Ошибка проверки домена: {message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(ShowErrorMessage)); // Показываем всплывающее сообщение о неудачной проверке
             }
             else
             {
-                if (InvokeRequired)
-                {
-                    BeginInvoke(new Action(() => MessageBox.Show($"Ошибка проверки домена: {message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error)));
-                }
-                else
-                {
-                    MessageBox.Show($"Ошибка проверки домена: {message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                ShowErrorMessage(); // Немедленно уведомляем пользователя о повторяющейся проблеме
             }
         }
         private async void test()
@@ -844,6 +916,7 @@ namespace CheckPosition
                 domainCheckCancellation?.Dispose();
                 notifyIcon.Visible = false;
                 notifyIcon.Dispose();
+                notifyContextMenu?.Dispose(); // Закрываем контекстное меню, чтобы не оставлять подвешенные элементы UI
             }
         }
 
