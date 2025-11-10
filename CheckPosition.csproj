@@ -199,6 +199,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="database.sql" />
     <Content Include="iconfinder_Citycons_meter_1342936.ico" />
     <EmbeddedResource Include="Resources\favicon.ico" />
     <None Include="Resources\iconfinder_key_1055040.png" />

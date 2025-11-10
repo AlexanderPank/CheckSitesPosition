@@ -291,13 +291,14 @@ namespace CheckPosition
                 UpdateStatusTextSafe("Проверка остановлена пользователем");
             }
 
-            if (!completedSuccessfully && lastError != null)
-            {
-                // Сообщаем пользователю о неудавшейся проверке после всех повторов
-                HandleDomainCheckError(triggeredAutomatically, lastError);
-            }
+           
             finally
             {
+                if (!completedSuccessfully && lastError != null)
+                {
+                    // Сообщаем пользователю о неудавшейся проверке после всех повторов
+                    HandleDomainCheckError(triggeredAutomatically, lastError);
+                }
                 FinalizeDomainCheck(triggeredAutomatically, successfulCount, requests.Count);
                 domainCheckCancellation?.Dispose();
                 domainCheckCancellation = null;
