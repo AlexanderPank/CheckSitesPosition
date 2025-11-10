@@ -34,6 +34,7 @@
             this.contextMenuTreeView = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.checkRow = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
+            this.showHistoryMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
             this.rowDown = new System.Windows.Forms.ToolStripMenuItem();
             this.panel2 = new System.Windows.Forms.Panel();
@@ -85,13 +86,15 @@
             // 
             // contextMenuTreeView
             // 
+            // Регистрируем пункты контекстного меню списка проверок
             this.contextMenuTreeView.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.checkRow,
+            this.showHistoryMenuItem,
             this.toolStripMenuItem2,
             this.rowUp,
             this.rowDown});
             this.contextMenuTreeView.Name = "contextMenuTreeView";
-            this.contextMenuTreeView.Size = new System.Drawing.Size(242, 76);
+            this.contextMenuTreeView.Size = new System.Drawing.Size(242, 120);
             // 
             // checkRow
             // 
@@ -100,6 +103,15 @@
             this.checkRow.Size = new System.Drawing.Size(241, 22);
             this.checkRow.Text = "Проверить позиции страницы";
             this.checkRow.Click += new System.EventHandler(this.checkRow_Click);
+            //
+            // showHistoryMenuItem
+            //
+            // Добавляем пункт контекстного меню для просмотра истории позиций
+            this.showHistoryMenuItem.Name = "showHistoryMenuItem";
+            this.showHistoryMenuItem.Size = new System.Drawing.Size(241, 22);
+            this.showHistoryMenuItem.Text = "Показать историю";
+            // Привязываем обработчик для открытия формы с графиком истории
+            this.showHistoryMenuItem.Click += new System.EventHandler(this.showHistoryMenuItem_Click);
             // 
             // toolStripMenuItem2
             // 
@@ -493,6 +505,8 @@
         private System.Windows.Forms.SaveFileDialog sd;
         private System.Windows.Forms.OpenFileDialog od;
         private System.Windows.Forms.ToolStripMenuItem checkRow;
+        // Элемент контекстного меню для открытия истории позиций
+        private System.Windows.Forms.ToolStripMenuItem showHistoryMenuItem;
         private System.Windows.Forms.StatusStrip statusStrip;
         private System.Windows.Forms.ToolStripStatusLabel statusLabel;
         private System.Windows.Forms.ToolStripProgressBar statusProgressBar;
