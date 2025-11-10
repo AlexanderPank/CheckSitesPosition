@@ -22,11 +22,21 @@ namespace CheckPosition
                 rbUse2.Checked = true;
 
 
+            // Переносим время с учётом пользовательских настроек и старого формата хранения
             var dt = Properties.Settings.Default.TimeToCheck;
-            if (dt != "")
+            if (!string.IsNullOrWhiteSpace(dt))
             {
-                dtTimer.Value = DateTime.Parse(Properties.Settings.Default.TimeToCheck);
-                cbTimer.Checked = true;
+                if (TimeSpan.TryParse(dt, out var parsedTime))
+                {
+                    dtTimer.Value = DateTime.Today.Add(parsedTime);
+                    cbTimer.Checked = true;
+                }
+                else if (DateTime.TryParse(dt, out var parsedDateTime))
+                {
+                    // Поддерживаем прежний формат, когда сохранялась полная дата
+                    dtTimer.Value = DateTime.Today.Add(parsedDateTime.TimeOfDay);
+                    cbTimer.Checked = true;
+                }
             }
         }
 
@@ -37,9 +47,15 @@ namespace CheckPosition
             else
                 Properties.Settings.Default.XMLURL = tbYandexUrl2.Text;
             if (cbTimer.Checked)
-                Properties.Settings.Default.TimeToCheck = dtTimer.Text;
+            {
+                // Сохраняем только время, чтобы исключить проблемы с парсингом строки
+                Properties.Settings.Default.TimeToCheck = dtTimer.Value.TimeOfDay.ToString();
+            }
             else
-                Properties.Settings.Default.TimeToCheck = "";
+            {
+                // При отключении таймера очищаем настройку
+                Properties.Settings.Default.TimeToCheck = string.Empty;
+            }
             Close();
         }
 
