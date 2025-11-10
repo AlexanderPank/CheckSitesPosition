@@ -37,9 +37,6 @@
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
             this.rowDown = new System.Windows.Forms.ToolStripMenuItem();
             this.panel2 = new System.Windows.Forms.Panel();
-            this.statusStrip = new System.Windows.Forms.StatusStrip();
-            this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.dg = new System.Windows.Forms.DataGridView();
             this.colID = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colDateCheck = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -52,6 +49,9 @@
             this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.statusStrip = new System.Windows.Forms.StatusStrip();
+            this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
+            this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.проектToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showDomainListForm = new System.Windows.Forms.ToolStripMenuItem();
@@ -75,9 +75,11 @@
             this.splitter1 = new System.Windows.Forms.Splitter();
             this.sd = new System.Windows.Forms.SaveFileDialog();
             this.od = new System.Windows.Forms.OpenFileDialog();
+            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripSeparator();
             this.contextMenuTreeView.SuspendLayout();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).BeginInit();
+            this.statusStrip.SuspendLayout();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -129,38 +131,9 @@
             this.panel2.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
             this.panel2.Size = new System.Drawing.Size(1430, 523);
             this.panel2.TabIndex = 1;
-            //
-            // statusStrip
-            //
-            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.statusLabel,
-            this.statusProgressBar});
-            this.statusStrip.Location = new System.Drawing.Point(0, 525);
-            this.statusStrip.Name = "statusStrip";
-            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
-            this.statusStrip.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.statusStrip.Size = new System.Drawing.Size(1430, 22);
-            this.statusStrip.SizingGrip = false;
-            this.statusStrip.TabIndex = 4;
-            this.statusStrip.Text = "statusStrip";
-            this.statusStrip.Visible = true;
-            //
-            // statusLabel
-            //
-            this.statusLabel.Name = "statusLabel";
-            this.statusLabel.Size = new System.Drawing.Size(0, 17);
-            this.statusLabel.Visible = false;
-            //
-            // statusProgressBar
-            //
-            this.statusProgressBar.AutoSize = false;
-            this.statusProgressBar.Name = "statusProgressBar";
-            this.statusProgressBar.Size = new System.Drawing.Size(200, 16);
-            this.statusProgressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
-            this.statusProgressBar.Visible = false;
-            //
+            // 
             // dg
-            //
+            // 
             this.dg.AllowUserToOrderColumns = true;
             this.dg.AllowUserToResizeRows = false;
             this.dg.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
@@ -263,6 +236,33 @@
             this.colStatus.HeaderText = "Статус";
             this.colStatus.Name = "colStatus";
             // 
+            // statusStrip
+            // 
+            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.statusLabel,
+            this.statusProgressBar});
+            this.statusStrip.Location = new System.Drawing.Point(3, 525);
+            this.statusStrip.Name = "statusStrip";
+            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
+            this.statusStrip.Size = new System.Drawing.Size(1427, 22);
+            this.statusStrip.SizingGrip = false;
+            this.statusStrip.TabIndex = 4;
+            this.statusStrip.Text = "statusStrip";
+            // 
+            // statusLabel
+            // 
+            this.statusLabel.Name = "statusLabel";
+            this.statusLabel.Size = new System.Drawing.Size(0, 17);
+            this.statusLabel.Visible = false;
+            // 
+            // statusProgressBar
+            // 
+            this.statusProgressBar.AutoSize = false;
+            this.statusProgressBar.Name = "statusProgressBar";
+            this.statusProgressBar.Size = new System.Drawing.Size(200, 16);
+            this.statusProgressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+            this.statusProgressBar.Visible = false;
+            // 
             // menuStrip1
             // 
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -283,6 +283,7 @@
             this.showDomainListForm,
             this.showHostingListMenuItem,
             this.showCpaListMenuItem,
+            this.toolStripMenuItem4,
             this.bYandexMetrica,
             this.загрузитьКоличествоСделокИзTravelToolStripMenuItem,
             this.загрузитьКоличестовСделокИзAdmintadToolStripMenuItem,
@@ -296,17 +297,21 @@
             // 
             this.showDomainListForm.Name = "showDomainListForm";
             this.showDomainListForm.Size = new System.Drawing.Size(324, 22);
-            this.showDomainListForm.Text = "Показать список доменов";
+            this.showDomainListForm.Text = "Cписок доменов";
             this.showDomainListForm.Click += new System.EventHandler(this.showDomainListForm_Click);
-            // Пункт открытия справочника хостингов
+            // 
+            // showHostingListMenuItem
+            // 
             this.showHostingListMenuItem.Name = "showHostingListMenuItem";
             this.showHostingListMenuItem.Size = new System.Drawing.Size(324, 22);
-            this.showHostingListMenuItem.Text = "Показать список хостингов";
+            this.showHostingListMenuItem.Text = "Хостинги";
             this.showHostingListMenuItem.Click += new System.EventHandler(this.showHostingListMenuItem_Click);
-            // Пункт открытия справочника CPA сетей
+            // 
+            // showCpaListMenuItem
+            // 
             this.showCpaListMenuItem.Name = "showCpaListMenuItem";
             this.showCpaListMenuItem.Size = new System.Drawing.Size(324, 22);
-            this.showCpaListMenuItem.Text = "Показать список CPA";
+            this.showCpaListMenuItem.Text = "Партнерки";
             this.showCpaListMenuItem.Click += new System.EventHandler(this.showCpaListMenuItem_Click);
             // 
             // bYandexMetrica
@@ -437,6 +442,11 @@
             // 
             this.od.Filter = "Check Position Project|*.chps|All Files|*.*";
             // 
+            // toolStripMenuItem4
+            // 
+            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(321, 6);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 14F);
@@ -512,6 +522,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colAction;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
         private System.Windows.Forms.ToolStripMenuItem mContinue;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
     }
 }
 
