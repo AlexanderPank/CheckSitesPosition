@@ -35,6 +35,17 @@ namespace CheckPosition
         private String formTitle = "Проверка позиций сайта в поисковой выдаче Яндекс";
         private bool isProcessCheckin = false;
         private bool bStopChecking = false;
+        // Настраиваем интервалы автопроверок и состояния расписания
+        private readonly TimeSpan autoCheckInterval = TimeSpan.FromDays(1);
+        private readonly TimeSpan autoErrorDelay = TimeSpan.FromMinutes(10);
+        private readonly TimeSpan manualStopDelay = TimeSpan.FromMinutes(30);
+        private readonly TimeSpan autoCheckThreshold = TimeSpan.FromDays(7);
+        private int autoResumeStartIndex = 0;
+        private bool hasAutoResumePending = false;
+        private TimeSpan? configuredAutoTime = null;
+        private bool timerNeedsRealign = false;
+        private DateTime? manualStopResumeNotBefore = null;
+        private readonly object timerSync = new object();
 
         public Form1(string[] args, string title)
         {
@@ -115,35 +126,119 @@ namespace CheckPosition
             }
         }
 
-        private void SetDailyTimer(TimeSpan scheduledTime)
+        private double CalculateInitialInterval(TimeSpan scheduledTime, TimeSpan? firstRunDelay)
         {
-            // Включаем повторную настройку таймера вместо преждевременного выхода
+            // Рассчитываем задержку первого запуска, поддерживая переопределение задержки
+            if (firstRunDelay.HasValue) return Math.Max(1000, firstRunDelay.Value.TotalMilliseconds);
             DateTime now = DateTime.Now;
-            DateTime firstRun = new DateTime(LastDateCheck.Year, LastDateCheck.Month, LastDateCheck.Day, scheduledTime.Hours, scheduledTime.Minutes, scheduledTime.Seconds);
-            double dailyInterval = 7 * 24 * 60 * 60 * 1000; // 3 * 24 часа в миллисекундах
+            DateTime firstRun = new DateTime(now.Year, now.Month, now.Day, scheduledTime.Hours, scheduledTime.Minutes, scheduledTime.Seconds);
+            if (now >= firstRun) firstRun = firstRun.AddDays(1);
+            return Math.Max(1000, (firstRun - now).TotalMilliseconds);
+        }
 
-            // Если firstRun уже прошел, добавляем 3 дня
-            if (now > firstRun) firstRun = firstRun.AddDays(7);
-
-            TimeSpan timeDifference = firstRun - now;
-            double initialInterval = timeDifference.TotalMilliseconds;
-            if (initialInterval < 7) initialInterval = 7;
-
-            // Обнуляем предыдущий таймер, чтобы избежать утечек ресурсов
-            timer?.Stop();
-            timer?.Dispose();
-
-            // Устанавливаем таймер
-            this.timer = new System.Timers.Timer();
-
-            this.timer.Interval = initialInterval;
-
-            this.timer.Elapsed += (sender, e) =>
+        private void SetDailyTimer(TimeSpan scheduledTime, TimeSpan? firstRunDelay = null)
+        {
+            // Настраиваем таймер на регулярные проверки и возможное восстановление после сбоев
+            lock (timerSync)
             {
-                timer.Interval = dailyInterval;
-                if (!isProcessCheckin) mStart_Click(sender, e);
-            };
-            this.timer.Start();
+                configuredAutoTime = scheduledTime;
+                timerNeedsRealign = firstRunDelay.HasValue;
+                timer?.Stop();
+                timer?.Dispose();
+                timer = new System.Timers.Timer
+                {
+                    AutoReset = true,
+                    Interval = CalculateInitialInterval(scheduledTime, firstRunDelay)
+                };
+                timer.Elapsed += OnAutoTimerElapsed;
+                timer.Start();
+            }
+        }
+
+        private void OnAutoTimerElapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            // Поддерживаем корректный интервал автозапуска и контролируем ограничения
+            double nextInterval;
+            lock (timerSync)
+            {
+                if (timerNeedsRealign)
+                {
+                    timerNeedsRealign = false;
+                    nextInterval = CalculateInitialInterval(configuredAutoTime ?? TimeSpan.Zero, null);
+                }
+                else
+                {
+                    nextInterval = autoCheckInterval.TotalMilliseconds;
+                }
+                if (timer != null) timer.Interval = nextInterval;
+            }
+
+            if (!isProcessCheckin && CanAutoStart()) StartAutoCheckFromTimer();
+        }
+
+        private bool CanAutoStart()
+        {
+            // Проверяем ограничения перед автоматическим запуском проверок
+            lock (timerSync)
+            {
+                if (configuredAutoTime == null) return false;
+                if (manualStopResumeNotBefore.HasValue)
+                {
+                    if (DateTime.Now < manualStopResumeNotBefore.Value) return false;
+                    manualStopResumeNotBefore = null;
+                }
+            }
+            return true;
+        }
+
+        private void StartAutoCheckFromTimer()
+        {
+            // Обеспечиваем запуск автопроверки в UI-потоке
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(StartAutoCheckFromTimer));
+                return;
+            }
+
+            if (configuredAutoTime == null) return;
+
+            int startIndex = hasAutoResumePending ? autoResumeStartIndex : 0;
+            bool skipRecent = true;
+            hasAutoResumePending = false;
+            checkDomains(startIndex, skipRecent, true);
+        }
+
+        private void ScheduleAutoResume(TimeSpan delay, int resumeIndex, bool isManualStop)
+        {
+            // Планируем повторный запуск после ошибки или ручной остановки
+            if (configuredAutoTime == null) return;
+            if (resumeIndex < 0) resumeIndex = 0;
+
+            lock (timerSync)
+            {
+                hasAutoResumePending = true;
+                autoResumeStartIndex = resumeIndex;
+                if (isManualStop) manualStopResumeNotBefore = DateTime.Now.Add(delay);
+            }
+
+            SetDailyTimer(configuredAutoTime.Value, delay);
+        }
+
+        private bool ShouldCheckRowAutomatically(int rowIndex)
+        {
+            // Решаем, нужно ли перепроверять строку с учётом давности последней проверки
+            var cellValue = dg.Rows[rowIndex].Cells[colDateCheck.Index].Value;
+            if (cellValue == null) return true;
+            var raw = cellValue.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) return true;
+
+            string[] formats = { "dd.MM.yy", "dd.MM.yyyy", "dd.MM.yy HH:mm", "dd.MM.yyyy HH:mm", "dd.MM.yy H:mm", "dd.MM.yyyy H:mm" };
+            if (DateTime.TryParseExact(raw, formats, CultureInfo.GetCultureInfo("ru-RU"), DateTimeStyles.None, out var lastCheck))
+                return DateTime.Now - lastCheck >= autoCheckThreshold;
+
+            if (DateTime.TryParse(raw, out lastCheck)) return DateTime.Now - lastCheck >= autoCheckThreshold;
+
+            return true;
         }
 
         private void NotifyIcon_DoubleClick(object sender, EventArgs e)
@@ -158,11 +253,26 @@ namespace CheckPosition
             this.database.getTableData(this.dg, "sites");
             colorize();
 
-            if (Properties.Settings.Default.TimeToCheck != "")
+            if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.TimeToCheck))
             {
                 this.Text = this.formTitle + " - последняя проверка от " + LastDateCheck.ToString("dd.MM.yy");
-                SetDailyTimer(TimeSpan.Parse(Properties.Settings.Default.TimeToCheck));
-
+                if (TimeSpan.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedSpan))
+                {
+                    configuredAutoTime = parsedSpan;
+                    SetDailyTimer(parsedSpan);
+                }
+                else if (DateTime.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedDate))
+                {
+                    // Поддерживаем устаревшее хранение полного времени
+                    configuredAutoTime = parsedDate.TimeOfDay;
+                    SetDailyTimer(configuredAutoTime.Value);
+                }
+                else
+                {
+                    // При ошибочных данных используем запуск в полночь
+                    configuredAutoTime = TimeSpan.Zero;
+                    SetDailyTimer(configuredAutoTime.Value);
+                }
             }
 
         }
@@ -287,9 +397,37 @@ namespace CheckPosition
             _FormSettings.ShowDialog();
             if (timer != null)
                 timer.Stop();
-
-            if (Properties.Settings.Default.TimeToCheck != "")
-                SetDailyTimer(TimeSpan.Parse(Properties.Settings.Default.TimeToCheck));
+            configuredAutoTime = null;
+            if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.TimeToCheck))
+            {
+                if (TimeSpan.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedSpan))
+                {
+                    configuredAutoTime = parsedSpan;
+                    SetDailyTimer(parsedSpan);
+                }
+                else if (DateTime.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedDate))
+                {
+                    configuredAutoTime = parsedDate.TimeOfDay;
+                    SetDailyTimer(configuredAutoTime.Value);
+                }
+                else
+                {
+                    // При ошибочных данных используем запуск в полночь
+                    configuredAutoTime = TimeSpan.Zero;
+                    SetDailyTimer(configuredAutoTime.Value);
+                }
+            }
+            else
+            {
+                // При отключении автопроверки сбрасываем расписание
+                lock (timerSync)
+                {
+                    hasAutoResumePending = false;
+                    manualStopResumeNotBefore = null;
+                    timer?.Dispose();
+                    timer = null;
+                }
+            }
 
         }
 
@@ -420,48 +558,74 @@ namespace CheckPosition
             checkDomains(startFrom);
         }
 
-        private void checkDomains(int startFrom = 0)
+        private void checkDomains(int startFrom = 0, bool skipRecent = false, bool triggeredAutomatically = false)
         {
+            // Управляем запуском проверок с учётом автоперезапусков и фильтра по сроку давности
+            if (Properties.Settings.Default.XMLURL == "")
+            {
+                MessageBox.Show("Не задан XML Url для запросов!");
+                return;
+            }
+
             isProcessCheckin = true;
             wasStop = false;
-            if (Properties.Settings.Default.XMLURL == "") { MessageBox.Show("Не задан XML Url для запросов!"); return; }
+            if (triggeredAutomatically) hasAutoResumePending = false;
+
             pProgress.Visible = true;
             dg.Enabled = false;
             pb.Value = 0;
             pb.Maximum = dg.RowCount;
-            int count_checked = 0;
+            int countChecked = 0;
+            int lastAttemptedIndex = startFrom;
 
             for (int i = startFrom; i < dg.RowCount - 1; i++)
             {
+                lastAttemptedIndex = i;
                 pb.Value = i + 1;
                 if (wasStop) break;
+                if (skipRecent && !ShouldCheckRowAutomatically(i)) continue;
                 try
                 {
-                    checkRowInTable(i);
+                    if (checkRowInTable(i)) countChecked++;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
+                    if (triggeredAutomatically)
+                    {
+                        // При ошибке автоматической проверки делаем паузу перед продолжением
+                        ScheduleAutoResume(autoErrorDelay, i, false);
+                    }
                     break;
-
                 }
                 Application.DoEvents();
                 Thread.Sleep(1500);
-                count_checked++;
             }
-          
+
+            if (triggeredAutomatically && wasStop)
+            {
+                // После ручной остановки откладываем автозапуск
+                ScheduleAutoResume(manualStopDelay, lastAttemptedIndex, true);
+            }
+
             pProgress.Visible = false;
             dg.Enabled = true;
             colorize();
             isProcessCheckin = false;
-            if (count_checked > dg.RowCount - 20 - startFrom)
+
+            // Актуализируем дату последней массовой проверки при необходимости
+            bool needUpdateLastDate = triggeredAutomatically && countChecked > 0;
+            if (!needUpdateLastDate && !triggeredAutomatically)
+                needUpdateLastDate = countChecked > dg.RowCount - 20 - startFrom;
+
+            if (needUpdateLastDate)
             {
                 LastDateCheck = DateTime.Now;
                 Properties.Settings.Default.LastDateCheck = LastDateCheck;
                 Properties.Settings.Default.Save();
                 this.Text = this.formTitle + " - последняя проверка от " + LastDateCheck.ToString("dd.MM.yy");
             }
-             
-         }
+
+        }
 
 
         private void checkRow_Click(object sender, EventArgs e)
@@ -634,7 +798,12 @@ namespace CheckPosition
 
         private void mStop_Click(object sender, EventArgs e)
         {
+            // Фиксируем ручную остановку и блокируем автозапуск на ближайшие 30 минут
             wasStop = true;
+            lock (timerSync)
+            {
+                manualStopResumeNotBefore = DateTime.Now.Add(manualStopDelay);
+            }
         }
     }
 }
