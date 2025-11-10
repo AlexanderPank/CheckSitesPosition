@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
 
@@ -76,7 +77,55 @@ namespace CheckPosition
         {
             string query = $"INSERT INTO checks  (date, site_id, position, middle_position) VALUES ('{date}','{site_id}',{positionCurrent}, {middle_position}) ";
             execSQL(query);
-        } 
+        }
+        // Возвращает историю изменения позиций сайта из таблицы checks
+        public IReadOnlyList<CheckHistoryPoint> GetCheckHistory(int siteId)
+        {
+            // Формируем список точек истории с учетом потоко-безопасности
+            if (siteId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(siteId));
+            }
+
+            // Создаем список для накопления результатов выгрузки
+            var history = new List<CheckHistoryPoint>();
+
+            lock (_dbSync)
+            {
+                // Выполняем параметризованный запрос, чтобы исключить SQL-инъекции
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT date, position, middle_position FROM checks WHERE site_id = $siteId ORDER BY date;";
+                    command.Parameters.AddWithValue("$siteId", siteId);
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            // Парсим дату в безопасном режиме, сохраняя исходные данные при ошибке
+                            string rawDate = reader.IsDBNull(0) ? string.Empty : reader.GetString(0);
+                            DateTime parsedDate;
+                            bool parsed = DateTime.TryParse(rawDate, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out parsedDate) ||
+                                          DateTime.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsedDate);
+                            if (!parsed)
+                            {
+                                // Пропускаем запись, если дату корректно распознать не удалось
+                                continue;
+                            }
+
+                            // Забираем позиции с учетом возможных NULL в базе
+                            int position = reader.IsDBNull(1) ? 0 : reader.GetInt32(1);
+                            int? middlePosition = reader.IsDBNull(2) ? (int?)null : reader.GetInt32(2);
+
+                            history.Add(new CheckHistoryPoint(parsedDate, position, middlePosition));
+                        }
+                    }
+                }
+            }
+
+            return history;
+        }
         public void updateSite(int id, string date, string pageAddress, string Query, int positionCurrent, int positionMiddleCurrent, int positionPrevious, int positionMiddlePrevious, string urlInSearch, string comment, string status)
         {
             string query = $"UPDATE sites SET date='{date}', page_address='{pageAddress}', query='{Query}', position_current={positionCurrent}, position_middle_current={positionMiddleCurrent}, " +

@@ -784,6 +784,46 @@ namespace CheckPosition
             StartDomainCheckForIndexes(indexes, false);
         }
 
+        // Открывает форму графика истории для выбранной строки
+        private void showHistoryMenuItem_Click(object sender, EventArgs e)
+        {
+            // Проверяем наличие выделенной строки перед открытием истории
+            if (dg.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Выберите строку для просмотра истории.");
+                return;
+            }
+
+            var selectedRow = dg.SelectedRows[0];
+            // Извлекаем идентификатор сайта из скрытого столбца
+            string rawId = Convert.ToString(selectedRow.Cells[colID.Index].Value);
+            if (!int.TryParse(rawId, out int siteId) || siteId <= 0)
+            {
+                MessageBox.Show("Не удалось определить сайт для отображения истории.");
+                return;
+            }
+
+            try
+            {
+                // Загружаем исторические данные из базы
+                var history = database.GetCheckHistory(siteId);
+                string pageUrl = Convert.ToString(selectedRow.Cells[colPageUrl.Index].Value) ?? string.Empty;
+                string keyword = Convert.ToString(selectedRow.Cells[colKeyword.Index].Value) ?? string.Empty;
+                string caption = string.Join(" | ", new[] { pageUrl.Trim(), keyword.Trim() }.Where(text => !string.IsNullOrEmpty(text)));
+
+                using (var historyForm = new SiteHistoryForm(caption, history))
+                {
+                    // Показываем форму истории как модальное окно
+                    historyForm.ShowDialog(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Сообщаем пользователю об ошибке загрузки истории
+                MessageBox.Show($"Не удалось загрузить историю позиций: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void rowUp_Click(object sender, EventArgs e)
         {
             int increment = 1;
