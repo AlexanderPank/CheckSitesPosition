@@ -37,6 +37,9 @@ namespace CheckPosition
         private bool isProcessCheckin = false;
         private CancellationTokenSource domainCheckCancellation;
         private System.Threading.Timer periodicCheckTimer;
+        // Добавляем формы справочников для управления хостингами и CPA сетями
+        private HostingList hostingListForm;
+        private CpaList cpaListForm;
         // Храним интервалы периодического обновления и срок устаревания записей
         private static readonly TimeSpan periodicCheckInterval = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan staleCheckThreshold = TimeSpan.FromDays(7);
@@ -826,9 +829,38 @@ namespace CheckPosition
 
         private void showDomainListForm_Click(object sender, EventArgs e)
         {
-            using (DomainList f = new DomainList(this.database)) {
+            using (DomainList f = new DomainList(this.database))
+            {
                 f.ShowDialog();
             }
+        }
+
+        private void showHostingListMenuItem_Click(object sender, EventArgs e)
+        {
+            // Открываем форму хостингов и делаем ее активной для пользователя
+            if (hostingListForm == null || hostingListForm.IsDisposed)
+            {
+                hostingListForm = new HostingList(database);
+            }
+
+            hostingListForm.Show(this);
+            hostingListForm.WindowState = FormWindowState.Normal;
+            hostingListForm.BringToFront();
+            hostingListForm.Activate();
+        }
+
+        private void showCpaListMenuItem_Click(object sender, EventArgs e)
+        {
+            // Аналогично открываем справочник CPA сетей и передаем управление пользователю
+            if (cpaListForm == null || cpaListForm.IsDisposed)
+            {
+                cpaListForm = new CpaList(database);
+            }
+
+            cpaListForm.Show(this);
+            cpaListForm.WindowState = FormWindowState.Normal;
+            cpaListForm.BringToFront();
+            cpaListForm.Activate();
         }
 
         private void bYandexMetrica_Click(object sender, EventArgs e)

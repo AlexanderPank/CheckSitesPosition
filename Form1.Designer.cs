@@ -55,6 +55,8 @@
             this.menuStrip1 = new System.Windows.Forms.MenuStrip();
             this.проектToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showDomainListForm = new System.Windows.Forms.ToolStripMenuItem();
+            this.showHostingListMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.showCpaListMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.bYandexMetrica = new System.Windows.Forms.ToolStripMenuItem();
             this.загрузитьКоличествоСделокИзTravelToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.загрузитьКоличестовСделокИзAdmintadToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -279,6 +281,8 @@
             // 
             this.проектToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.showDomainListForm,
+            this.showHostingListMenuItem,
+            this.showCpaListMenuItem,
             this.bYandexMetrica,
             this.загрузитьКоличествоСделокИзTravelToolStripMenuItem,
             this.загрузитьКоличестовСделокИзAdmintadToolStripMenuItem,
@@ -294,6 +298,16 @@
             this.showDomainListForm.Size = new System.Drawing.Size(324, 22);
             this.showDomainListForm.Text = "Показать список доменов";
             this.showDomainListForm.Click += new System.EventHandler(this.showDomainListForm_Click);
+            // Пункт открытия справочника хостингов
+            this.showHostingListMenuItem.Name = "showHostingListMenuItem";
+            this.showHostingListMenuItem.Size = new System.Drawing.Size(324, 22);
+            this.showHostingListMenuItem.Text = "Показать список хостингов";
+            this.showHostingListMenuItem.Click += new System.EventHandler(this.showHostingListMenuItem_Click);
+            // Пункт открытия справочника CPA сетей
+            this.showCpaListMenuItem.Name = "showCpaListMenuItem";
+            this.showCpaListMenuItem.Size = new System.Drawing.Size(324, 22);
+            this.showCpaListMenuItem.Text = "Показать список CPA";
+            this.showCpaListMenuItem.Click += new System.EventHandler(this.showCpaListMenuItem_Click);
             // 
             // bYandexMetrica
             // 
@@ -476,6 +490,8 @@
         private System.Windows.Forms.ToolStripMenuItem rowUp;
         private System.Windows.Forms.ToolStripMenuItem rowDown;
         private System.Windows.Forms.ToolStripMenuItem showDomainListForm;
+        private System.Windows.Forms.ToolStripMenuItem showHostingListMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem showCpaListMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem1;
         private System.Windows.Forms.ToolStripMenuItem bYandexMetrica;
         private System.Windows.Forms.ToolStripMenuItem загрузитьКоличествоСделокИзTravelToolStripMenuItem;

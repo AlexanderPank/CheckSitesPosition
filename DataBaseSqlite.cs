@@ -12,6 +12,8 @@ namespace CheckPosition
     {
         private SqliteConnection _connection;
         private String dataBasePath = "";
+        // Добавляем приватный объект для синхронизации обращений к БД
+        private readonly object _dbSync = new object();
         public DataBaseSqlite(String curPath)
         {
             dataBasePath = Path.Combine(curPath, "database.db");
@@ -140,6 +142,174 @@ namespace CheckPosition
             execSQL($"UPDATE {tableName} SET {fieldName}={value} WHERE id={id};");
         }
 
+        // Добавляем защищенный метод для проверки и открытия соединения
+        private void EnsureConnectionOpen()
+        {
+            lock (_dbSync)
+            {
+                if (_connection.State != ConnectionState.Open)
+                {
+                    _connection.Open();
+                }
+            }
+        }
+
+        // Добавляем метод загрузки всех записей из таблицы hosting_list
+        public List<HostingRecord> LoadHostingList()
+        {
+            var result = new List<HostingRecord>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT id, name, ip FROM hosting_list ORDER BY id;";
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string name = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            string ip = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                            result.Add(new HostingRecord(id, name, ip));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Добавляем метод вставки новой записи в hosting_list с возвратом идентификатора
+        public long InsertHostingRecord(string name, string ip)
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    using (var command = _connection.CreateCommand())
+                    {
+                        command.Transaction = transaction;
+                        command.CommandText = "INSERT INTO hosting_list (name, ip) VALUES ($name, $ip);";
+                        command.Parameters.AddWithValue("$name", name ?? string.Empty);
+                        command.Parameters.AddWithValue("$ip", ip ?? string.Empty);
+                        command.ExecuteNonQuery();
+                    }
+
+                    using (var idCommand = _connection.CreateCommand())
+                    {
+                        idCommand.Transaction = transaction;
+                        idCommand.CommandText = "SELECT last_insert_rowid();";
+                        long id = Convert.ToInt64(idCommand.ExecuteScalar());
+                        transaction.Commit();
+                        return id;
+                    }
+                }
+            }
+        }
+
+        // Добавляем метод обновления отдельных полей таблицы hosting_list
+        public void UpdateHostingField(long id, string fieldName, string value)
+        {
+            if (fieldName != "name" && fieldName != "ip")
+            {
+                throw new ArgumentException("Недопустимое имя поля hosting_list", nameof(fieldName));
+            }
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = $"UPDATE hosting_list SET {fieldName} = $value WHERE id = $id;";
+                    command.Parameters.AddWithValue("$value", value ?? string.Empty);
+                    command.Parameters.AddWithValue("$id", id);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        // Добавляем метод загрузки всех записей из таблицы cpa_list
+        public List<CpaRecord> LoadCpaList()
+        {
+            var result = new List<CpaRecord>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT id, name, login, url, script, description FROM cpa_list ORDER BY id;";
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string name = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            string login = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                            string url = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
+                            string script = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+                            string description = reader.IsDBNull(5) ? string.Empty : reader.GetString(5);
+                            result.Add(new CpaRecord(id, name, login, url, script, description));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Добавляем метод вставки новой записи в cpa_list
+        public long InsertCpaRecord(string name, string login, string url, string script, string description)
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    using (var command = _connection.CreateCommand())
+                    {
+                        command.Transaction = transaction;
+                        command.CommandText = "INSERT INTO cpa_list (name, login, url, script, description) VALUES ($name, $login, $url, $script, $description);";
+                        command.Parameters.AddWithValue("$name", name ?? string.Empty);
+                        command.Parameters.AddWithValue("$login", login ?? string.Empty);
+                        command.Parameters.AddWithValue("$url", url ?? string.Empty);
+                        command.Parameters.AddWithValue("$script", script ?? string.Empty);
+                        command.Parameters.AddWithValue("$description", description ?? string.Empty);
+                        command.ExecuteNonQuery();
+                    }
+
+                    using (var idCommand = _connection.CreateCommand())
+                    {
+                        idCommand.Transaction = transaction;
+                        idCommand.CommandText = "SELECT last_insert_rowid();";
+                        long id = Convert.ToInt64(idCommand.ExecuteScalar());
+                        transaction.Commit();
+                        return id;
+                    }
+                }
+            }
+        }
+
+        // Добавляем метод обновления безопасно ограниченных полей таблицы cpa_list
+        public void UpdateCpaField(long id, string fieldName, string value)
+        {
+            if (fieldName != "name" && fieldName != "login" && fieldName != "url" && fieldName != "script" && fieldName != "description")
+            {
+                throw new ArgumentException("Недопустимое имя поля cpa_list", nameof(fieldName));
+            }
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = $"UPDATE cpa_list SET {fieldName} = $value WHERE id = $id;";
+                    command.Parameters.AddWithValue("$value", value ?? string.Empty);
+                    command.Parameters.AddWithValue("$id", id);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
         public List<string> getNotCheckedSiteList()
         {
             List<string> lst = new List<string>();
@@ -201,5 +371,41 @@ namespace CheckPosition
 
             return lst;
         }
+    }
+
+    // Добавляем структуру-обертку для записей hosting_list
+    public sealed class HostingRecord
+    {
+        public HostingRecord(long id, string name, string ip)
+        {
+            Id = id;
+            Name = name;
+            Ip = ip;
+        }
+
+        public long Id { get; }
+        public string Name { get; }
+        public string Ip { get; }
+    }
+
+    // Добавляем структуру-обертку для записей cpa_list
+    public sealed class CpaRecord
+    {
+        public CpaRecord(long id, string name, string login, string url, string script, string description)
+        {
+            Id = id;
+            Name = name;
+            Login = login;
+            Url = url;
+            Script = script;
+            Description = description;
+        }
+
+        public long Id { get; }
+        public string Name { get; }
+        public string Login { get; }
+        public string Url { get; }
+        public string Script { get; }
+        public string Description { get; }
     }
 }
