@@ -119,6 +119,18 @@
     <Compile Include="DomainList.Designer.cs">
       <DependentUpon>DomainList.cs</DependentUpon>
     </Compile>
+    <Compile Include="HostingList.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="HostingList.Designer.cs">
+      <DependentUpon>HostingList.cs</DependentUpon>
+    </Compile>
+    <Compile Include="CpaList.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="CpaList.Designer.cs">
+      <DependentUpon>CpaList.cs</DependentUpon>
+    </Compile>
     <Compile Include="fGetNotCheckedSiteList.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -158,6 +170,12 @@
     <Compile Include="YandexMetricChecker.cs" />
     <EmbeddedResource Include="DomainList.resx">
       <DependentUpon>DomainList.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="HostingList.resx">
+      <DependentUpon>HostingList.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="CpaList.resx">
+      <DependentUpon>CpaList.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="fGetNotCheckedSiteList.resx">
       <DependentUpon>fGetNotCheckedSiteList.cs</DependentUpon>
