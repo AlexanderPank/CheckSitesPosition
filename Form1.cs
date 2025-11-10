@@ -105,28 +105,33 @@ namespace CheckPosition
 
         public void AddToStartup()
         {
-            RegistryKey reg = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-            if (reg.GetValue(appName) == null)
+            // Используем using, чтобы гарантировать закрытие ключа реестра
+            using (RegistryKey reg = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
             {
-                reg.SetValue(appName, $"\"{appPath}\"");
+                if (reg.GetValue(appName) == null)
+                {
+                    reg.SetValue(appName, $"\"{appPath}\"");
+                }
             }
-            reg.Close();
         }
 
         private void SetDailyTimer(TimeSpan scheduledTime)
         {
-            return;
-
+            // Включаем повторную настройку таймера вместо преждевременного выхода
             DateTime now = DateTime.Now;
             DateTime firstRun = new DateTime(LastDateCheck.Year, LastDateCheck.Month, LastDateCheck.Day, scheduledTime.Hours, scheduledTime.Minutes, scheduledTime.Seconds);
             double dailyInterval = 7 * 24 * 60 * 60 * 1000; // 3 * 24 часа в миллисекундах
 
             // Если firstRun уже прошел, добавляем 3 дня
-            if (now > firstRun) firstRun = firstRun.AddDays(7); 
+            if (now > firstRun) firstRun = firstRun.AddDays(7);
 
             TimeSpan timeDifference = firstRun - now;
             double initialInterval = timeDifference.TotalMilliseconds;
             if (initialInterval < 7) initialInterval = 7;
+
+            // Обнуляем предыдущий таймер, чтобы избежать утечек ресурсов
+            timer?.Stop();
+            timer?.Dispose();
 
             // Устанавливаем таймер
             this.timer = new System.Timers.Timer();
@@ -608,6 +613,16 @@ namespace CheckPosition
                 e.Cancel = true;
                 this.WindowState = FormWindowState.Minimized;
                 this.Hide();
+                // Гарантируем видимость иконки в трее при сворачивании
+                notifyIcon.Visible = true;
+            }
+            else
+            {
+                // Освобождаем ресурсы при реальном закрытии приложения
+                timer?.Stop();
+                timer?.Dispose();
+                notifyIcon.Visible = false;
+                notifyIcon.Dispose();
             }
         }
 
