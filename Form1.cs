@@ -1,17 +1,17 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Windows.Forms;
-using System.IO;
-using System.Net;
 using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Globalization;
-using Microsoft.Win32;
+using System.Windows.Forms;
 
 namespace CheckPosition
 {
@@ -86,7 +86,6 @@ namespace CheckPosition
             notifyIcon.Visible = true;
             notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
 
-            bool startInTray = false;
             foreach (string arg in args)
                 if (arg == "--intray"){
                     var t = new System.Timers.Timer(100);
@@ -124,19 +123,26 @@ namespace CheckPosition
         // Описываем данные, необходимые для фоновой проверки конкретной строки
         private sealed class DomainCheckRequest
         {
-            public int RowIndex { get; init; }
-            public string Url { get; init; }
-            public string Keyword { get; init; }
+            public int RowIndex { get; set; }
+            public string Url { get; set; }
+            public string Keyword { get; set; }
+
+            public DomainCheckRequest(int rowIndex, string url, string keyword)
+            {
+                RowIndex = rowIndex;
+                Url = url;
+                Keyword = keyword;
+            }
         }
 
         // Результат проверки домена, требующий применения в UI-потоке
         private sealed class DomainCheckResult
         {
-            public DomainCheckRequest Request { get; init; }
-            public int Position { get; init; }
-            public int AveragePosition { get; init; }
-            public string FoundPageUrl { get; init; }
-            public DateTime CheckDate { get; init; }
+            public DomainCheckRequest Request { get; set; }
+            public int Position { get; set; }
+            public int AveragePosition { get; set; }
+            public string FoundPageUrl { get; set; }
+            public DateTime CheckDate { get; set; }
         }
 
         // Запускаем автоматическую проверку строк, устаревших более чем на заданный срок
@@ -187,7 +193,7 @@ namespace CheckPosition
                 if (string.IsNullOrWhiteSpace(url) || !url.Trim().StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.IsNullOrWhiteSpace(keyword)) continue;
 
-                requests.Add(new DomainCheckRequest { RowIndex = index, Url = url.Trim(), Keyword = keyword.Trim() });
+                requests.Add(new DomainCheckRequest(index, url.Trim(), keyword.Trim()) );
             }
             return requests;
         }
@@ -355,8 +361,7 @@ namespace CheckPosition
                 BeginInvoke(new Action<int>(PrepareUiForCheck), total);
                 return;
             }
-
-            dg.Enabled = false;
+             
             statusProgressBar.Value = 0;
             statusProgressBar.Maximum = Math.Max(1, total);
             statusProgressBar.Visible = true;
@@ -372,8 +377,7 @@ namespace CheckPosition
                 BeginInvoke(new Action<bool, int, int>(FinalizeDomainCheck), triggeredAutomatically, successfulCount, totalCount);
                 return;
             }
-
-            dg.Enabled = true;
+             
             statusProgressBar.Visible = false;
             statusLabel.Visible = false;
             statusLabel.Text = string.Empty;
@@ -450,9 +454,18 @@ namespace CheckPosition
 
             string[] formats = { "dd.MM.yy", "dd.MM.yyyy", "dd.MM.yy HH:mm", "dd.MM.yyyy HH:mm", "dd.MM.yy H:mm", "dd.MM.yyyy H:mm" };
             if (DateTime.TryParseExact(raw, formats, CultureInfo.GetCultureInfo("ru-RU"), DateTimeStyles.None, out var lastCheck))
-                return DateTime.Now - lastCheck >= staleCheckThreshold;
+            {
+                var nowDate = DateTime.Now.Date;
+                var checkDate = lastCheck.Date;
+                return (nowDate - checkDate) >= staleCheckThreshold;
+            }
 
-            if (DateTime.TryParse(raw, out lastCheck)) return DateTime.Now - lastCheck >= staleCheckThreshold;
+            if (DateTime.TryParse(raw, out lastCheck))
+            {
+                var nowDate = DateTime.Now.Date;
+                var checkDate = lastCheck.Date;
+                return (nowDate - checkDate) >= staleCheckThreshold;
+            }
 
             return true;
         }
@@ -660,7 +673,8 @@ namespace CheckPosition
             for (int i = safeStart; i < dg.RowCount; i++)
             {
                 if (dg.Rows[i].IsNewRow) continue;
-                if (skipRecent && !ShouldCheckRowAutomatically(i)) continue;
+                bool sh = ShouldCheckRowAutomatically(i);
+                if (skipRecent || !sh) continue;
                 indexes.Add(i);
             }
 
@@ -680,7 +694,7 @@ namespace CheckPosition
             var indexes = new List<int>();
             foreach (DataGridViewRow row in dg.SelectedRows)
             {
-                if (row == null || row.IsNewRow) continue;
+                if (row == null || row.IsNewRow || !ShouldCheckRowAutomatically(row.Index)) continue;
                 indexes.Add(row.Index);
             }
 

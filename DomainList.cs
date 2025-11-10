@@ -153,7 +153,6 @@ namespace CheckPosition
                 if (this.isStop) break;
                 string dname = Helper.getStringValue(dg.Rows[i].Cells[colName.Index].Value);
                 dname = BrowserEO.GetDomainName(dname);
-                String ip = "";
                 string dname_rus = Helper.getStringValue(dg.Rows[i].Cells[colRusName.Index].Value);
                 long id = Helper.getIngValue(dg.Rows[i].Cells[colID.Index].Value);
 

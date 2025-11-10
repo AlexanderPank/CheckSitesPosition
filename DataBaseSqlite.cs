@@ -172,10 +172,7 @@ namespace CheckPosition
                     {
                         string name = reader["name"].ToString();
                         string rusName = BrowserEO.GetDomainName(name); ;
-                        if (name == "гостиница-кварт-казань.рф")
-                        {
-                            name = name;
-                        }
+ 
                         if (rusName!="")
                         {
                             rusName = rusName.ToLower().Replace("www.", "").Replace("http://", "").Replace("https://", "").Replace("/", "").Trim();
