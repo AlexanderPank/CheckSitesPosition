@@ -9,6 +9,7 @@ using System.Net;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Globalization;
 using Microsoft.Win32;
 
@@ -29,28 +30,21 @@ namespace CheckPosition
         private Func<object, int, int> getIngValue;
         private Func<object, string> getStringValue;
         private fSearchReplace searchForm;
-        private System.Timers.Timer timer = null;
         private System.Windows.Forms.NotifyIcon notifyIcon;
         private DateTime LastDateCheck = DateTime.Now.AddDays(-3);
         private String formTitle = "Проверка позиций сайта в поисковой выдаче Яндекс";
         private bool isProcessCheckin = false;
-        private bool bStopChecking = false;
-        // Настраиваем интервалы автопроверок и состояния расписания
-        private readonly TimeSpan autoCheckInterval = TimeSpan.FromDays(1);
-        private readonly TimeSpan autoErrorDelay = TimeSpan.FromMinutes(10);
-        private readonly TimeSpan manualStopDelay = TimeSpan.FromMinutes(30);
-        private readonly TimeSpan autoCheckThreshold = TimeSpan.FromDays(7);
-        private int autoResumeStartIndex = 0;
-        private bool hasAutoResumePending = false;
-        private TimeSpan? configuredAutoTime = null;
-        private bool timerNeedsRealign = false;
-        private DateTime? manualStopResumeNotBefore = null;
-        private readonly object timerSync = new object();
+        private CancellationTokenSource domainCheckCancellation;
+        private System.Threading.Timer periodicCheckTimer;
+        // Храним интервалы периодического обновления и срок устаревания записей
+        private static readonly TimeSpan periodicCheckInterval = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan staleCheckThreshold = TimeSpan.FromDays(7);
+        private const string StatusCheckingText = "идет проверка доменов";
 
         public Form1(string[] args, string title)
         {
             InitializeComponent();
-            
+
             this.Text = title;
             _CurrentPath = Path.GetDirectoryName(Application.ExecutablePath).Replace("CheckPosition.exe", "");
             database = new DataBaseSqlite(_CurrentPath);
@@ -107,6 +101,326 @@ namespace CheckPosition
                 }
             AddToStartup();
           //  test();
+            InitializePeriodicCheckTimer();
+        }
+
+        // Настраиваем периодический таймер, запускающий проверку каждые 10 минут
+        private void InitializePeriodicCheckTimer()
+        {
+            periodicCheckTimer = new System.Threading.Timer(_ =>
+            {
+                try
+                {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke(new Action(RunAutomaticDomainCheck));
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Игнорируем, если форма уже уничтожена
+                }
+            }, null, periodicCheckInterval, periodicCheckInterval);
+        }
+
+        // Описываем данные, необходимые для фоновой проверки конкретной строки
+        private sealed class DomainCheckRequest
+        {
+            public int RowIndex { get; init; }
+            public string Url { get; init; }
+            public string Keyword { get; init; }
+        }
+
+        // Результат проверки домена, требующий применения в UI-потоке
+        private sealed class DomainCheckResult
+        {
+            public DomainCheckRequest Request { get; init; }
+            public int Position { get; init; }
+            public int AveragePosition { get; init; }
+            public string FoundPageUrl { get; init; }
+            public DateTime CheckDate { get; init; }
+        }
+
+        // Запускаем автоматическую проверку строк, устаревших более чем на заданный срок
+        private void RunAutomaticDomainCheck()
+        {
+            if (isProcessCheckin) return;
+            if (dg.RowCount == 0) return;
+
+            var indexes = new List<int>();
+            for (int i = 0; i < dg.RowCount; i++)
+            {
+                if (dg.Rows[i].IsNewRow) continue;
+                if (ShouldCheckRowAutomatically(i)) indexes.Add(i);
+            }
+
+            StartDomainCheckForIndexes(indexes, true);
+        }
+
+        // Готовим и запускаем асинхронную проверку для выбранных строк
+        private void StartDomainCheckForIndexes(List<int> indexes, bool triggeredAutomatically)
+        {
+            if (indexes == null || indexes.Count == 0) return;
+            if (isProcessCheckin) return;
+
+            var requests = CollectRequests(indexes);
+            if (requests.Count == 0)
+            {
+                UpdateStatusTextSafe(triggeredAutomatically ? string.Empty : "Нет подходящих записей для проверки");
+                statusProgressBar.Visible = false;
+                return;
+            }
+
+            _ = RunDomainChecksAsync(requests, triggeredAutomatically);
+        }
+
+        // Считываем данные строк и готовим заявки на проверку доменов
+        private List<DomainCheckRequest> CollectRequests(IEnumerable<int> indexes)
+        {
+            var requests = new List<DomainCheckRequest>();
+            foreach (var index in indexes)
+            {
+                if (index < 0 || index >= dg.Rows.Count) continue;
+                var row = dg.Rows[index];
+                if (row.IsNewRow) continue;
+
+                string url = getStringValue(row.Cells[colPageUrl.Index].Value);
+                string keyword = getStringValue(row.Cells[colKeyword.Index].Value);
+                if (string.IsNullOrWhiteSpace(url) || !url.Trim().StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.IsNullOrWhiteSpace(keyword)) continue;
+
+                requests.Add(new DomainCheckRequest { RowIndex = index, Url = url.Trim(), Keyword = keyword.Trim() });
+            }
+            return requests;
+        }
+
+        // Асинхронно выполняем проверку доменов и обновляем интерфейс
+        private async Task RunDomainChecksAsync(List<DomainCheckRequest> requests, bool triggeredAutomatically)
+        {
+            if (requests.Count == 0) return;
+
+            isProcessCheckin = true;
+            domainCheckCancellation?.Cancel();
+            domainCheckCancellation?.Dispose();
+            domainCheckCancellation = new CancellationTokenSource();
+            var token = domainCheckCancellation.Token;
+
+            PrepareUiForCheck(requests.Count);
+
+            int successfulCount = 0;
+
+            try
+            {
+                var summary = await Task.Run(() => ProcessDomainChecks(requests, triggeredAutomatically, token), token);
+                successfulCount = summary.SuccessfulCount;
+            }
+            catch (OperationCanceledException)
+            {
+                UpdateStatusTextSafe("Проверка остановлена пользователем");
+            }
+            catch (Exception ex)
+            {
+                HandleDomainCheckError(triggeredAutomatically, ex);
+            }
+            finally
+            {
+                FinalizeDomainCheck(triggeredAutomatically, successfulCount, requests.Count);
+                domainCheckCancellation?.Dispose();
+                domainCheckCancellation = null;
+                isProcessCheckin = false;
+            }
+        }
+
+        // Выполняем сетевые вызовы и формируем результаты проверок доменов
+        private (int SuccessfulCount, int LastAttemptedIndex) ProcessDomainChecks(List<DomainCheckRequest> requests, bool triggeredAutomatically, CancellationToken token)
+        {
+            int successfulCount = 0;
+            int lastAttemptedIndex = -1;
+
+            for (int i = 0; i < requests.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+                var request = requests[i];
+                lastAttemptedIndex = request.RowIndex;
+
+                try
+                {
+                    var result = ExecuteDomainCheck(request, token);
+                    ApplyDomainCheckResultSafe(result);
+                    UpdateProgressSafe(i + 1, requests.Count);
+                    successfulCount++;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    HandleDomainCheckError(triggeredAutomatically, ex);
+                    break;
+                }
+            }
+
+            return (successfulCount, lastAttemptedIndex);
+        }
+
+        // Выполняем запросы к XML API и высчитываем позицию домена
+        private DomainCheckResult ExecuteDomainCheck(DomainCheckRequest request, CancellationToken token)
+        {
+            var attempts = new List<int>();
+            int bestPosition = int.MaxValue;
+            string foundPageUrl = string.Empty;
+
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                token.ThrowIfCancellationRequested();
+
+                int position = getPosition(request.Keyword, request.Url, out var foundUrl, "2", token);
+                if (position < 0) throw new InvalidOperationException("Ошибка получения позиции домена");
+                bestPosition = Math.Min(bestPosition, position);
+                attempts.Add(position);
+                foundPageUrl = foundUrl;
+                Task.Delay(TimeSpan.FromSeconds(1), token).Wait(token);
+            }
+
+            if (bestPosition == -1) throw new InvalidOperationException("Ошибка работы XML сервиса");
+
+            int averagePosition = attempts.Count > 0 ? (int)attempts.Average() : 0;
+            return new DomainCheckResult
+            {
+                Request = request,
+                Position = bestPosition,
+                AveragePosition = averagePosition,
+                FoundPageUrl = foundPageUrl,
+                CheckDate = DateTime.Now
+            };
+        }
+
+        // Применяем результаты проверки в потоке интерфейса
+        private void ApplyDomainCheckResultSafe(DomainCheckResult result)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action<DomainCheckResult>(ApplyDomainCheckResultSafe), result);
+                return;
+            }
+            ApplyDomainCheckResult(result);
+        }
+
+        // Обновляем данные строки, сохраняем результат и пишем историю проверок
+        private void ApplyDomainCheckResult(DomainCheckResult result)
+        {
+            var index = result.Request.RowIndex;
+            if (index < 0 || index >= dg.Rows.Count) return;
+            var row = dg.Rows[index];
+            if (row.IsNewRow) return;
+
+            int prevPosition = getIngValue(row.Cells[colCurrentPosition.Index].Value, 0);
+            int prevMidPosition = getIngValue(row.Cells[colMidCurrent.Index].Value, 0);
+
+            row.Cells[colCurrentPosition.Index].Value = result.Position;
+            row.Cells[colMidCurrent.Index].Value = result.AveragePosition;
+            row.Cells[colLastPosition.Index].Value = prevPosition;
+            row.Cells[colMidPrev.Index].Value = prevMidPosition;
+            row.Cells[colFoundPageUrl.Index].Value = result.FoundPageUrl;
+            row.Cells[colDateCheck.Index].Value = result.CheckDate.ToString("dd.MM.yy");
+
+            saveRow(index);
+
+            int id = getIngValue(row.Cells[colID.Index].Value, -1);
+            if (id >= 0)
+                this.database.insertChecks(id, result.CheckDate.ToString("dd.MM.yy"), result.Position, result.AveragePosition);
+        }
+
+        // Обновляем прогресс проверки в статус-баре
+        private void UpdateProgressSafe(int current, int total)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int, int>(UpdateProgressSafe), current, total);
+                return;
+            }
+
+            int safeTotal = Math.Max(1, total);
+            statusProgressBar.Maximum = safeTotal;
+            statusProgressBar.Value = Math.Min(current, safeTotal);
+            statusProgressBar.Visible = true;
+            statusLabel.Visible = true;
+            statusLabel.Text = $"{StatusCheckingText}: {current}/{total}";
+        }
+
+        // Подготавливаем интерфейс перед запуском фоновой проверки
+        private void PrepareUiForCheck(int total)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int>(PrepareUiForCheck), total);
+                return;
+            }
+
+            dg.Enabled = false;
+            statusProgressBar.Value = 0;
+            statusProgressBar.Maximum = Math.Max(1, total);
+            statusProgressBar.Visible = true;
+            statusLabel.Text = StatusCheckingText;
+            statusLabel.Visible = true;
+        }
+
+        // Завершаем проверку и возвращаем интерфейс в исходное состояние
+        private void FinalizeDomainCheck(bool triggeredAutomatically, int successfulCount, int totalCount)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<bool, int, int>(FinalizeDomainCheck), triggeredAutomatically, successfulCount, totalCount);
+                return;
+            }
+
+            dg.Enabled = true;
+            statusProgressBar.Visible = false;
+            statusLabel.Visible = false;
+            statusLabel.Text = string.Empty;
+            colorize();
+
+            bool needUpdateLastDate = totalCount > 0 && successfulCount > 0 && (triggeredAutomatically || successfulCount == totalCount);
+            if (needUpdateLastDate)
+            {
+                LastDateCheck = DateTime.Now;
+                Properties.Settings.Default.LastDateCheck = LastDateCheck;
+                Properties.Settings.Default.Save();
+                this.Text = this.formTitle + " - последняя проверка от " + LastDateCheck.ToString("dd.MM.yy");
+            }
+        }
+
+        // Безопасно обновляем текст статуса в строке состояния
+        private void UpdateStatusTextSafe(string text)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<string>(UpdateStatusTextSafe), text);
+                return;
+            }
+            statusLabel.Text = text;
+            statusLabel.Visible = !string.IsNullOrWhiteSpace(text);
+            if (!statusLabel.Visible) statusProgressBar.Visible = false;
+        }
+
+        // Отвечаем за обработку ошибок проверки и уведомление пользователя
+        private void HandleDomainCheckError(bool triggeredAutomatically, Exception ex)
+        {
+            string message = ex?.Message ?? "Неизвестная ошибка";
+            if (triggeredAutomatically)
+            {
+                UpdateStatusTextSafe($"Ошибка проверки доменов: {message}");
+            }
+            else
+            {
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(() => MessageBox.Show($"Ошибка проверки домена: {message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error)));
+                }
+                else
+                {
+                    MessageBox.Show($"Ошибка проверки домена: {message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
         private async void test()
         {
@@ -126,107 +440,9 @@ namespace CheckPosition
             }
         }
 
-        private double CalculateInitialInterval(TimeSpan scheduledTime, TimeSpan? firstRunDelay)
-        {
-            // Рассчитываем задержку первого запуска, поддерживая переопределение задержки
-            if (firstRunDelay.HasValue) return Math.Max(1000, firstRunDelay.Value.TotalMilliseconds);
-            DateTime now = DateTime.Now;
-            DateTime firstRun = new DateTime(now.Year, now.Month, now.Day, scheduledTime.Hours, scheduledTime.Minutes, scheduledTime.Seconds);
-            if (now >= firstRun) firstRun = firstRun.AddDays(1);
-            return Math.Max(1000, (firstRun - now).TotalMilliseconds);
-        }
-
-        private void SetDailyTimer(TimeSpan scheduledTime, TimeSpan? firstRunDelay = null)
-        {
-            // Настраиваем таймер на регулярные проверки и возможное восстановление после сбоев
-            lock (timerSync)
-            {
-                configuredAutoTime = scheduledTime;
-                timerNeedsRealign = firstRunDelay.HasValue;
-                timer?.Stop();
-                timer?.Dispose();
-                timer = new System.Timers.Timer
-                {
-                    AutoReset = true,
-                    Interval = CalculateInitialInterval(scheduledTime, firstRunDelay)
-                };
-                timer.Elapsed += OnAutoTimerElapsed;
-                timer.Start();
-            }
-        }
-
-        private void OnAutoTimerElapsed(object sender, System.Timers.ElapsedEventArgs e)
-        {
-            // Поддерживаем корректный интервал автозапуска и контролируем ограничения
-            double nextInterval;
-            lock (timerSync)
-            {
-                if (timerNeedsRealign)
-                {
-                    timerNeedsRealign = false;
-                    nextInterval = CalculateInitialInterval(configuredAutoTime ?? TimeSpan.Zero, null);
-                }
-                else
-                {
-                    nextInterval = autoCheckInterval.TotalMilliseconds;
-                }
-                if (timer != null) timer.Interval = nextInterval;
-            }
-
-            if (!isProcessCheckin && CanAutoStart()) StartAutoCheckFromTimer();
-        }
-
-        private bool CanAutoStart()
-        {
-            // Проверяем ограничения перед автоматическим запуском проверок
-            lock (timerSync)
-            {
-                if (configuredAutoTime == null) return false;
-                if (manualStopResumeNotBefore.HasValue)
-                {
-                    if (DateTime.Now < manualStopResumeNotBefore.Value) return false;
-                    manualStopResumeNotBefore = null;
-                }
-            }
-            return true;
-        }
-
-        private void StartAutoCheckFromTimer()
-        {
-            // Обеспечиваем запуск автопроверки в UI-потоке
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(StartAutoCheckFromTimer));
-                return;
-            }
-
-            if (configuredAutoTime == null) return;
-
-            int startIndex = hasAutoResumePending ? autoResumeStartIndex : 0;
-            bool skipRecent = true;
-            hasAutoResumePending = false;
-            checkDomains(startIndex, skipRecent, true);
-        }
-
-        private void ScheduleAutoResume(TimeSpan delay, int resumeIndex, bool isManualStop)
-        {
-            // Планируем повторный запуск после ошибки или ручной остановки
-            if (configuredAutoTime == null) return;
-            if (resumeIndex < 0) resumeIndex = 0;
-
-            lock (timerSync)
-            {
-                hasAutoResumePending = true;
-                autoResumeStartIndex = resumeIndex;
-                if (isManualStop) manualStopResumeNotBefore = DateTime.Now.Add(delay);
-            }
-
-            SetDailyTimer(configuredAutoTime.Value, delay);
-        }
-
         private bool ShouldCheckRowAutomatically(int rowIndex)
         {
-            // Решаем, нужно ли перепроверять строку с учётом давности последней проверки
+            // Определяем, устарела ли запись и требует ли она автоматической перепроверки
             var cellValue = dg.Rows[rowIndex].Cells[colDateCheck.Index].Value;
             if (cellValue == null) return true;
             var raw = cellValue.ToString();
@@ -234,9 +450,9 @@ namespace CheckPosition
 
             string[] formats = { "dd.MM.yy", "dd.MM.yyyy", "dd.MM.yy HH:mm", "dd.MM.yyyy HH:mm", "dd.MM.yy H:mm", "dd.MM.yyyy H:mm" };
             if (DateTime.TryParseExact(raw, formats, CultureInfo.GetCultureInfo("ru-RU"), DateTimeStyles.None, out var lastCheck))
-                return DateTime.Now - lastCheck >= autoCheckThreshold;
+                return DateTime.Now - lastCheck >= staleCheckThreshold;
 
-            if (DateTime.TryParse(raw, out lastCheck)) return DateTime.Now - lastCheck >= autoCheckThreshold;
+            if (DateTime.TryParse(raw, out lastCheck)) return DateTime.Now - lastCheck >= staleCheckThreshold;
 
             return true;
         }
@@ -253,27 +469,9 @@ namespace CheckPosition
             this.database.getTableData(this.dg, "sites");
             colorize();
 
-            if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.TimeToCheck))
-            {
+            // Обновляем заголовок, если известна дата последней проверки
+            if (LastDateCheck > DateTime.MinValue)
                 this.Text = this.formTitle + " - последняя проверка от " + LastDateCheck.ToString("dd.MM.yy");
-                if (TimeSpan.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedSpan))
-                {
-                    configuredAutoTime = parsedSpan;
-                    SetDailyTimer(parsedSpan);
-                }
-                else if (DateTime.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedDate))
-                {
-                    // Поддерживаем устаревшее хранение полного времени
-                    configuredAutoTime = parsedDate.TimeOfDay;
-                    SetDailyTimer(configuredAutoTime.Value);
-                }
-                else
-                {
-                    // При ошибочных данных используем запуск в полночь
-                    configuredAutoTime = TimeSpan.Zero;
-                    SetDailyTimer(configuredAutoTime.Value);
-                }
-            }
 
         }
 
@@ -301,11 +499,9 @@ namespace CheckPosition
         }
 
      
-        private bool wasStop = false;
- 
-
-        private int getPosition(String keyword, String findUrl, out String url, String Region="2")
+        private int getPosition(String keyword, String findUrl, out String url, String Region = "2", CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             url = "";
             String urlXML = Properties.Settings.Default.XMLURL;
             //urlXML += "&query=" + keyword + "&lr=" + Region + "&lr=2&l10n=ru&sortby=rlv&filter=none&maxpassages=1&groupby=attr%3Dd.mode%3Ddeep.groups-on-page%3D100.docs-in-group%3D1&page=0";
@@ -324,22 +520,21 @@ namespace CheckPosition
                 };
 
                 try
-                { 
+                {
+                    token.ThrowIfCancellationRequested();
                     //https://довериевсети.рф/site/ifish2.ru
-                    var d = webClient.DownloadData(new Uri(urlXML));
-                    text = Encoding.UTF8.GetString(d);
+                    var data = webClient.DownloadData(new Uri(urlXML));
+                    token.ThrowIfCancellationRequested();
+                    text = Encoding.UTF8.GetString(data);
                 }
                 catch (Exception ex)
                 {
-                    wasStop = true;
-                    Debug.WriteLine("Error " + ex.Message + " -> " + urlXML); return 0;
+                    throw new InvalidOperationException($"Ошибка загрузки данных: {ex.Message}", ex);
                 }
             }
 
-            if (wasStop) return -1;
+            if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("Ошибка получения данных поиска");
 
-            if (text=="") { MessageBox.Show("Ошибка получения данных"); wasStop = true; return 0; }
-            
 
             String regExp = @"error code=(.*?)>(.*?)<";
             String mText = System.Xml.Linq.XDocument.Parse(text).ToString();
@@ -349,10 +544,9 @@ namespace CheckPosition
             {
                 String errorCode = matches[0].Groups[1].Value;
                 String errorText =  matches[0].Groups[2].Value ;
-                MessageBox.Show("Ошибка " + errorCode + " " + errorText);
-                return -2;
+                throw new InvalidOperationException($"Ошибка {errorCode} {errorText}");
             }
-            
+
             List<string> urls = listUrl(text);
             int pos = FindUrl(urls, findUrl);
             if (pos > 0) url = "OK";
@@ -394,41 +588,8 @@ namespace CheckPosition
 
         private void mSettings_Click(object sender, EventArgs e)
         {
+            // Просто открываем окно настроек без дополнительной логики расписания
             _FormSettings.ShowDialog();
-            if (timer != null)
-                timer.Stop();
-            configuredAutoTime = null;
-            if (!string.IsNullOrWhiteSpace(Properties.Settings.Default.TimeToCheck))
-            {
-                if (TimeSpan.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedSpan))
-                {
-                    configuredAutoTime = parsedSpan;
-                    SetDailyTimer(parsedSpan);
-                }
-                else if (DateTime.TryParse(Properties.Settings.Default.TimeToCheck, out var parsedDate))
-                {
-                    configuredAutoTime = parsedDate.TimeOfDay;
-                    SetDailyTimer(configuredAutoTime.Value);
-                }
-                else
-                {
-                    // При ошибочных данных используем запуск в полночь
-                    configuredAutoTime = TimeSpan.Zero;
-                    SetDailyTimer(configuredAutoTime.Value);
-                }
-            }
-            else
-            {
-                // При отключении автопроверки сбрасываем расписание
-                lock (timerSync)
-                {
-                    hasAutoResumePending = false;
-                    manualStopResumeNotBefore = null;
-                    timer?.Dispose();
-                    timer = null;
-                }
-            }
-
         }
 
 
@@ -441,72 +602,6 @@ namespace CheckPosition
             this.database.removeRecord(id, "sites");
         }
 
-        private bool checkRowInTable(int index)
-        {
-
-            if (dg.Rows[index].Cells[colPageUrl.Index].Value == null || dg.Rows[index].Cells[colKeyword.Index].Value == null
-                    || dg.Rows[index].Cells[colKeyword.Index].Value.ToString() == "") return false;
-            String url = dg.Rows[index].Cells[colPageUrl.Index].Value.ToString();
-            if (url == "" || url.IndexOf("http") != 0) return false;
-            String keyword = dg.Rows[index].Cells[colKeyword.Index].Value.ToString();
-
-
-            String foundPageUrl = "";
-            String dateNow = DateTime.Now.ToString("dd.MM.yy");
-            
-            List<int> ints = new List<int>();
-            int position = 10000;
-            for (int i = 0; i < 4; i++)
-            {
-                if (wasStop) return false;
-                Application.DoEvents();
-                var pos = getPosition(keyword, url, out foundPageUrl);
-                if (pos == -2)
-                {
-                    i--;
-
-                    Application.DoEvents();
-                    Thread.Sleep(5000);
-                    continue;
-
-                }
-                if (pos < 0)
-                {
-                    throw new Exception("Ошибка получения позиции");
-                    return false;
-                }
-                if (pos < position) position = pos;
-                ints.Add(pos);
-                Application.DoEvents();
-                Thread.Sleep(1000);
-                
-            }
-            int middle_position = ints.Count > 0 ? (int)ints.Average() : 0;
-
-            int prev_pos = 0;
-            int prev_mid_pos = 0;
-            if (position == -1) throw new Exception("Ошибка работы XML сервиса");
-
-            try
-            {
-                prev_pos = int.Parse(dg.Rows[index].Cells[colCurrentPosition.Index].Value.ToString());
-                prev_mid_pos = int.Parse(dg.Rows[index].Cells[colMidCurrent.Index].Value.ToString());
-            }catch (Exception) { 
-            
-            }
-             
-            dg.Rows[index].Cells[colCurrentPosition.Index].Value = position;
-            dg.Rows[index].Cells[colMidCurrent.Index].Value = middle_position;
-            dg.Rows[index].Cells[colLastPosition.Index].Value = prev_pos;
-            dg.Rows[index].Cells[colMidPrev.Index].Value = prev_mid_pos;
-            dg.Rows[index].Cells[colFoundPageUrl.Index].Value = foundPageUrl;
-            dg.Rows[index].Cells[colDateCheck.Index].Value = dateNow;
-            int id = int.Parse(dg.Rows[index].Cells[colID.Index].Value.ToString());
-            saveRow(index);
-            this.database.insertChecks(id, dateNow, position, middle_position);
-            return true;
-        }
-      
         private void saveRow(int index)
         {
 
@@ -538,15 +633,8 @@ namespace CheckPosition
 
         private void mStart_Click(object sender, EventArgs e)
         {
-            if (pProgress.InvokeRequired) pProgress.Invoke(new Action(() =>
-                {
-                    checkDomains(0);
-                
-                }
-            ));
-            else { checkDomains(0); }
-
-        
+            // Запускаем полную проверку доменов от первой строки
+            checkDomains(0);
         }
 
 
@@ -560,96 +648,50 @@ namespace CheckPosition
 
         private void checkDomains(int startFrom = 0, bool skipRecent = false, bool triggeredAutomatically = false)
         {
-            // Управляем запуском проверок с учётом автоперезапусков и фильтра по сроку давности
-            if (Properties.Settings.Default.XMLURL == "")
+            // Запускаем проверку доменов в отдельном потоке, формируя список индексов для обработки
+            if (string.IsNullOrWhiteSpace(Properties.Settings.Default.XMLURL))
             {
                 MessageBox.Show("Не задан XML Url для запросов!");
                 return;
             }
 
-            isProcessCheckin = true;
-            wasStop = false;
-            if (triggeredAutomatically) hasAutoResumePending = false;
-
-            pProgress.Visible = true;
-            dg.Enabled = false;
-            pb.Value = 0;
-            pb.Maximum = dg.RowCount;
-            int countChecked = 0;
-            int lastAttemptedIndex = startFrom;
-
-            for (int i = startFrom; i < dg.RowCount - 1; i++)
+            int safeStart = Math.Max(0, startFrom);
+            var indexes = new List<int>();
+            for (int i = safeStart; i < dg.RowCount; i++)
             {
-                lastAttemptedIndex = i;
-                pb.Value = i + 1;
-                if (wasStop) break;
+                if (dg.Rows[i].IsNewRow) continue;
                 if (skipRecent && !ShouldCheckRowAutomatically(i)) continue;
-                try
-                {
-                    if (checkRowInTable(i)) countChecked++;
-                }
-                catch (Exception)
-                {
-                    if (triggeredAutomatically)
-                    {
-                        // При ошибке автоматической проверки делаем паузу перед продолжением
-                        ScheduleAutoResume(autoErrorDelay, i, false);
-                    }
-                    break;
-                }
-                Application.DoEvents();
-                Thread.Sleep(1500);
+                indexes.Add(i);
             }
 
-            if (triggeredAutomatically && wasStop)
-            {
-                // После ручной остановки откладываем автозапуск
-                ScheduleAutoResume(manualStopDelay, lastAttemptedIndex, true);
-            }
-
-            pProgress.Visible = false;
-            dg.Enabled = true;
-            colorize();
-            isProcessCheckin = false;
-
-            // Актуализируем дату последней массовой проверки при необходимости
-            bool needUpdateLastDate = triggeredAutomatically && countChecked > 0;
-            if (!needUpdateLastDate && !triggeredAutomatically)
-                needUpdateLastDate = countChecked > dg.RowCount - 20 - startFrom;
-
-            if (needUpdateLastDate)
-            {
-                LastDateCheck = DateTime.Now;
-                Properties.Settings.Default.LastDateCheck = LastDateCheck;
-                Properties.Settings.Default.Save();
-                this.Text = this.formTitle + " - последняя проверка от " + LastDateCheck.ToString("dd.MM.yy");
-            }
-
+            StartDomainCheckForIndexes(indexes, triggeredAutomatically);
         }
 
 
         private void checkRow_Click(object sender, EventArgs e)
         {
-            if (dg.SelectedRows.Count > 0 && dg.SelectedRows[0].Index >= dg.RowCount - 1)
+            if (dg.SelectedRows.Count == 0)
             {
                 MessageBox.Show("Выберите строку для проверки!");
-
                 return;
             }
-            pb.Value = 0;
-            pb.Maximum = 1;
-            pProgress.Visible = true;
-            dg.Enabled = false;
-            for (int i = 0; i < dg.SelectedRows.Count; i++)
+
+            // Собираем индексы выбранных строк для точечной проверки
+            var indexes = new List<int>();
+            foreach (DataGridViewRow row in dg.SelectedRows)
             {
-                pb.Value = i + 1;
-                if (wasStop) break;
-                checkRowInTable(dg.SelectedRows[i].Index);
-                Application.DoEvents();
+                if (row == null || row.IsNewRow) continue;
+                indexes.Add(row.Index);
             }
-            pb.Value = 1;
-            pProgress.Visible = false;
-            dg.Enabled = true;
+
+            if (indexes.Count == 0)
+            {
+                MessageBox.Show("Выберите строку для проверки!");
+                return;
+            }
+
+            // Запускаем асинхронную проверку только для выделенных позиций
+            StartDomainCheckForIndexes(indexes, false);
         }
 
         private void rowUp_Click(object sender, EventArgs e)
@@ -783,8 +825,9 @@ namespace CheckPosition
             else
             {
                 // Освобождаем ресурсы при реальном закрытии приложения
-                timer?.Stop();
-                timer?.Dispose();
+                periodicCheckTimer?.Dispose();
+                domainCheckCancellation?.Cancel();
+                domainCheckCancellation?.Dispose();
                 notifyIcon.Visible = false;
                 notifyIcon.Dispose();
             }
@@ -798,12 +841,8 @@ namespace CheckPosition
 
         private void mStop_Click(object sender, EventArgs e)
         {
-            // Фиксируем ручную остановку и блокируем автозапуск на ближайшие 30 минут
-            wasStop = true;
-            lock (timerSync)
-            {
-                manualStopResumeNotBefore = DateTime.Now.Add(manualStopDelay);
-            }
+            // Отменяем текущую проверку доменов по требованию пользователя
+            domainCheckCancellation?.Cancel();
         }
     }
 }

@@ -37,9 +37,9 @@
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
             this.rowDown = new System.Windows.Forms.ToolStripMenuItem();
             this.panel2 = new System.Windows.Forms.Panel();
-            this.pProgress = new System.Windows.Forms.Panel();
-            this.label4 = new System.Windows.Forms.Label();
-            this.pb = new System.Windows.Forms.ProgressBar();
+            this.statusStrip = new System.Windows.Forms.StatusStrip();
+            this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
+            this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
             this.dg = new System.Windows.Forms.DataGridView();
             this.colID = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colDateCheck = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -75,7 +75,6 @@
             this.od = new System.Windows.Forms.OpenFileDialog();
             this.contextMenuTreeView.SuspendLayout();
             this.panel2.SuspendLayout();
-            this.pProgress.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).BeginInit();
             this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
@@ -121,7 +120,6 @@
             // 
             // panel2
             // 
-            this.panel2.Controls.Add(this.pProgress);
             this.panel2.Controls.Add(this.dg);
             this.panel2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel2.Location = new System.Drawing.Point(0, 24);
@@ -129,36 +127,38 @@
             this.panel2.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
             this.panel2.Size = new System.Drawing.Size(1430, 523);
             this.panel2.TabIndex = 1;
-            // 
-            // pProgress
-            // 
-            this.pProgress.Controls.Add(this.label4);
-            this.pProgress.Controls.Add(this.pb);
-            this.pProgress.Location = new System.Drawing.Point(409, 146);
-            this.pProgress.Name = "pProgress";
-            this.pProgress.Size = new System.Drawing.Size(533, 59);
-            this.pProgress.TabIndex = 4;
-            this.pProgress.Visible = false;
-            // 
-            // label4
-            // 
-            this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(166, 5);
-            this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(210, 14);
-            this.label4.TabIndex = 5;
-            this.label4.Text = "Идет проверка ключевых фраз";
-            // 
-            // pb
-            // 
-            this.pb.Location = new System.Drawing.Point(14, 28);
-            this.pb.Name = "pb";
-            this.pb.Size = new System.Drawing.Size(498, 17);
-            this.pb.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
-            this.pb.TabIndex = 0;
-            // 
+            //
+            // statusStrip
+            //
+            this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.statusLabel,
+            this.statusProgressBar});
+            this.statusStrip.Location = new System.Drawing.Point(0, 525);
+            this.statusStrip.Name = "statusStrip";
+            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
+            this.statusStrip.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.statusStrip.Size = new System.Drawing.Size(1430, 22);
+            this.statusStrip.SizingGrip = false;
+            this.statusStrip.TabIndex = 4;
+            this.statusStrip.Text = "statusStrip";
+            this.statusStrip.Visible = true;
+            //
+            // statusLabel
+            //
+            this.statusLabel.Name = "statusLabel";
+            this.statusLabel.Size = new System.Drawing.Size(0, 17);
+            this.statusLabel.Visible = false;
+            //
+            // statusProgressBar
+            //
+            this.statusProgressBar.AutoSize = false;
+            this.statusProgressBar.Name = "statusProgressBar";
+            this.statusProgressBar.Size = new System.Drawing.Size(200, 16);
+            this.statusProgressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+            this.statusProgressBar.Visible = false;
+            //
             // dg
-            // 
+            //
             this.dg.AllowUserToOrderColumns = true;
             this.dg.AllowUserToResizeRows = false;
             this.dg.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
@@ -428,6 +428,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 14F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1430, 547);
+            this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.splitter1);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.menuStrip1);
@@ -442,9 +443,9 @@
             this.Resize += new System.EventHandler(this.Form1_Resize);
             this.contextMenuTreeView.ResumeLayout(false);
             this.panel2.ResumeLayout(false);
-            this.pProgress.ResumeLayout(false);
-            this.pProgress.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).EndInit();
+            this.statusStrip.ResumeLayout(false);
+            this.statusStrip.PerformLayout();
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
             this.ResumeLayout(false);
@@ -468,9 +469,9 @@
         private System.Windows.Forms.SaveFileDialog sd;
         private System.Windows.Forms.OpenFileDialog od;
         private System.Windows.Forms.ToolStripMenuItem checkRow;
-        private System.Windows.Forms.Panel pProgress;
-        private System.Windows.Forms.Label label4;
-        private System.Windows.Forms.ProgressBar pb;
+        private System.Windows.Forms.StatusStrip statusStrip;
+        private System.Windows.Forms.ToolStripStatusLabel statusLabel;
+        private System.Windows.Forms.ToolStripProgressBar statusProgressBar;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem2;
         private System.Windows.Forms.ToolStripMenuItem rowUp;
         private System.Windows.Forms.ToolStripMenuItem rowDown;
