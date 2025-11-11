@@ -170,22 +170,25 @@ namespace CheckPosition
 
             axisY.Minimum = lowerBound; // Фиксируем нижнюю границу оси Y
             axisY.Maximum = upperBound; // Фиксируем верхнюю границу оси Y
-            axisY.Interval = 1d; // Обеспечиваем дискретность шкалы в один пункт для всех отметок
-            axisY.MajorTickMark.Interval = 1d; // Сохраняем метки оси на каждом целочисленном значении
+            axisY.Interval = 5d; // Обеспечиваем дискретность шкалы в один пункт для всех отметок
+            axisY.MajorTickMark.Interval = 5d; // Сохраняем метки оси на каждом целочисленном значении
             axisY.MajorGrid.Interval = 5d; // Выводим вспомогательные линии каждые пять позиций для лучшей читаемости
             axisY.MajorGrid.IntervalOffset = 0d; // Обнуляем смещение сетки, чтобы отметки совпадали с целыми значениями
             axisY.CustomLabels.Clear(); // Удаляем ранее добавленные пользовательские подписи
-
-            foreach (var value in BuildAxisLabels(lowerBound, upperBound))
+                                        // Метки через 5 единиц
+            foreach (var value in BuildAxisLabels(lowerBound, upperBound, 5))
             {
-                axisY.CustomLabels.Add(new CustomLabel(value - 0.5, value + 0.5, value.ToString("0"), 0, LabelMarkStyle.None)); // Формируем подписи ровно для нужных значений
+                axisY.CustomLabels.Add(
+                    new CustomLabel(value - 2.5, value + 2.5, value.ToString("0"), 0, LabelMarkStyle.None)
+                );
             }
 
-            chartArea.AxisX.Crossing = lowerBound; // Перемещаем ось X к нижней границе для отображения дат снизу
-            axisY.Crossing = double.NaN; // Сохраняем ось Y на левой границе области построения
+            chartArea.AxisX.Crossing = lowerBound;
+            axisY.Crossing = double.NaN;
         }
+         
 
-        private static IReadOnlyList<double> BuildAxisLabels(double lowerBound, double upperBound)
+        private static IReadOnlyList<double> BuildAxisLabels(double lowerBound, double upperBound, double dInc=1d)
         {
             // Готовим набор целочисленных отметок, соответствующих требованиям заказчика
             var labels = new SortedSet<double>();
@@ -195,7 +198,7 @@ namespace CheckPosition
                 normalizedLower = upperBound;
             }
 
-            for (var value = normalizedLower; value <= upperBound; value += 1d)
+            for (var value = normalizedLower; value <= upperBound; value += dInc)
             {
                 labels.Add(value); // Добавляем все целые значения в диапазоне для поддержки отрицательных диапазонов
             }
