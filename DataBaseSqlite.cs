@@ -384,6 +384,25 @@ namespace CheckPosition
             }
         }
 
+        // Добавляем метод точечного обновления CPA сайта с безопасными параметрами
+        public void UpdateSiteCpa(long siteId, long? cpaId)
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "UPDATE sites SET cpa_id = $cpaId WHERE id = $siteId;";
+                    command.Parameters.AddWithValue("$siteId", siteId);
+                    var cpaParameter = command.CreateParameter();
+                    cpaParameter.ParameterName = "$cpaId";
+                    cpaParameter.Value = cpaId.HasValue && cpaId.Value > 0 ? (object)cpaId.Value : DBNull.Value;
+                    command.Parameters.Add(cpaParameter);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
         public int getIdDomainByName(string dname)
         {
             string val = execSQL($"SELECT id FROM domains WHERE name='{dname}'");
