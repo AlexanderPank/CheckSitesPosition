@@ -53,6 +53,8 @@ namespace CheckPosition
             TimeSpan.FromMinutes(4),
             TimeSpan.FromMinutes(5)
         };
+        // Определяем разделители IP-адресов для поиска в списке хостингов
+        private static readonly char[] HostingIpSeparators = new[] { ' ', ',', ';', '\t', '\r', '\n' };
 
         public Form1(string[] args, string title)
         {
@@ -1003,6 +1005,262 @@ namespace CheckPosition
         {
             // Отменяем текущую проверку доменов по требованию пользователя
             domainCheckCancellation?.Cancel();
+        }
+
+        private void determineHostingMenuItem_Click(object sender, EventArgs e)
+        {
+            // Запускаем определение хостинга для всех сайтов
+            DetermineHostingForSites(null);
+        }
+
+        private void determineHostingContextMenuItem_Click(object sender, EventArgs e)
+        {
+            // Получаем набор идентификаторов выделенных строк и запускаем выборочное определение хостинга
+            var selectedSiteIds = new HashSet<long>();
+            foreach (DataGridViewRow row in dg.SelectedRows)
+            {
+                if (row.IsNewRow) continue;
+                long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+                if (siteId > 0) selectedSiteIds.Add(siteId);
+            }
+
+            if (selectedSiteIds.Count == 0)
+            {
+                MessageBox.Show("Выберите строку для определения хостинга.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            DetermineHostingForSites(selectedSiteIds);
+        }
+
+        private void DetermineHostingForSites(IReadOnlyCollection<long> targetSiteIds)
+        {
+            // Выполняем определение хостинга с подготовкой данных и обновлением интерфейса
+            Cursor previousCursor = Cursor.Current;
+            Cursor.Current = Cursors.WaitCursor;
+
+            try
+            {
+                var domainRecords = database.LoadDomainsWithIp();
+                if (domainRecords.Count == 0)
+                {
+                    MessageBox.Show("В справочнике доменов отсутствуют записи.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var hostingRecords = database.LoadHostingList();
+                if (hostingRecords.Count == 0)
+                {
+                    MessageBox.Show("В справочнике хостингов отсутствуют записи.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var siteRecords = database.LoadSitesForHostingDetection(targetSiteIds);
+                if (siteRecords.Count == 0)
+                {
+                    MessageBox.Show("Не найдены сайты для обработки.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var idnMapping = new IdnMapping();
+                var domainLookup = BuildDomainLookup(domainRecords, idnMapping);
+                if (domainLookup.Count == 0)
+                {
+                    MessageBox.Show("Не удалось подготовить список доменов для сравнения.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var hostingLookup = BuildHostingLookup(hostingRecords);
+                if (hostingLookup.Count == 0)
+                {
+                    MessageBox.Show("Не найдено ни одного IP-адреса в справочнике хостингов.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var hostingNameById = hostingRecords.ToDictionary(h => h.Id, h => h.Name);
+                var updates = new Dictionary<long, long>();
+                var resolvedNames = new Dictionary<long, string>();
+
+                foreach (var site in siteRecords)
+                {
+                    // Пытаемся извлечь доменное имя из адреса страницы
+                    if (!TryExtractHost(site.PageAddress, out var host)) continue;
+
+                    var hostVariants = BuildNormalizedVariants(host, idnMapping);
+                    var matchedDomain = FindDomainForHost(hostVariants, domainLookup);
+                    if (matchedDomain == null) continue;
+
+                    if (!TryFindHostingId(matchedDomain.Ip, hostingLookup, out var hostingId)) continue;
+
+                    if (site.CurrentHostingId == hostingId) continue;
+
+                    updates[site.Id] = hostingId;
+                    if (hostingNameById.TryGetValue(hostingId, out var hostingName))
+                        resolvedNames[site.Id] = hostingName;
+                }
+
+                if (updates.Count == 0)
+                {
+                    string message = targetSiteIds == null ? "Не удалось определить новые хостинги." : "Для выбранных записей хостинг не определен.";
+                    MessageBox.Show(message, "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                database.UpdateSiteHostingBulk(updates);
+
+                if (targetSiteIds == null)
+                {
+                    database.getTableData(this.dg, "sites");
+                    colorize();
+                }
+                else
+                {
+                    ApplyResolvedHostingToGrid(updates, resolvedNames);
+                }
+
+                MessageBox.Show($"Определено хостингов: {updates.Count}.", "Определение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка определения хостинга: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor.Current = previousCursor;
+            }
+        }
+
+        private static bool TryExtractHost(string pageAddress, out string host)
+        {
+            // Извлекаем доменное имя из URL с учетом отсутствующей схемы
+            host = string.Empty;
+            if (string.IsNullOrWhiteSpace(pageAddress)) return false;
+
+            string candidate = pageAddress.Trim();
+            if (!candidate.Contains("://")) candidate = "http://" + candidate;
+
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri)) return false;
+            if (string.IsNullOrWhiteSpace(uri.Host)) return false;
+
+            host = uri.Host;
+            return true;
+        }
+
+        private static Dictionary<string, DomainRecord> BuildDomainLookup(IEnumerable<DomainRecord> domains, IdnMapping idnMapping)
+        {
+            // Строим словарь доменных имен и их вариантов для быстрого сопоставления
+            var lookup = new Dictionary<string, DomainRecord>(StringComparer.OrdinalIgnoreCase);
+            foreach (var domain in domains)
+            {
+                if (domain == null) continue;
+                foreach (var variant in BuildNormalizedVariants(domain.Name, idnMapping))
+                {
+                    lookup[variant] = domain;
+                }
+                foreach (var variant in BuildNormalizedVariants(domain.RusName, idnMapping))
+                {
+                    lookup[variant] = domain;
+                }
+            }
+            return lookup;
+        }
+
+        private static HashSet<string> BuildNormalizedVariants(string value, IdnMapping idnMapping)
+        {
+            // Формируем множество вариантов доменного имени в разных представлениях
+            var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(value)) return variants;
+
+            void AddVariant(string candidate)
+            {
+                string normalized = NormalizeHostName(candidate);
+                if (!string.IsNullOrEmpty(normalized)) variants.Add(normalized);
+            }
+
+            AddVariant(value);
+            if (idnMapping != null)
+            {
+                try { AddVariant(idnMapping.GetAscii(value)); } catch { /* Игнорируем ошибки преобразования в punycode */ }
+                try { AddVariant(idnMapping.GetUnicode(value)); } catch { /* Игнорируем ошибки преобразования из punycode */ }
+            }
+
+            return variants;
+        }
+
+        private static string NormalizeHostName(string host)
+        {
+            // Приводим доменное имя к каноническому нижнему регистру
+            if (string.IsNullOrWhiteSpace(host)) return string.Empty;
+            return host.Trim().TrimEnd('.').ToLowerInvariant();
+        }
+
+        private static DomainRecord FindDomainForHost(IEnumerable<string> hostVariants, Dictionary<string, DomainRecord> domainLookup)
+        {
+            // Ищем домен для указанного хоста, учитывая поддомены
+            foreach (var variant in hostVariants)
+            {
+                if (domainLookup.TryGetValue(variant, out var record)) return record;
+
+                int dotIndex = variant.IndexOf('.');
+                while (dotIndex > 0 && dotIndex < variant.Length - 1)
+                {
+                    string parent = variant.Substring(dotIndex + 1);
+                    if (domainLookup.TryGetValue(parent, out record)) return record;
+                    dotIndex = variant.IndexOf('.', dotIndex + 1);
+                }
+            }
+            return null;
+        }
+
+        private static Dictionary<string, long> BuildHostingLookup(IEnumerable<HostingRecord> hostingRecords)
+        {
+            // Подготавливаем словарь IP-адресов и связанных с ними хостингов
+            var lookup = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (var hosting in hostingRecords)
+            {
+                if (hosting == null || string.IsNullOrWhiteSpace(hosting.Ip)) continue;
+                var parts = hosting.Ip.Split(HostingIpSeparators, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var part in parts)
+                {
+                    string ip = part.Trim();
+                    if (ip.Length == 0) continue;
+                    if (!lookup.ContainsKey(ip)) lookup[ip] = hosting.Id;
+                }
+            }
+            return lookup;
+        }
+
+        private static bool TryFindHostingId(string domainIp, Dictionary<string, long> hostingLookup, out long hostingId)
+        {
+            // Подбираем идентификатор хостинга по IP-адресу домена
+            hostingId = 0;
+            if (string.IsNullOrWhiteSpace(domainIp)) return false;
+
+            var parts = domainIp.Split(HostingIpSeparators, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                string ip = part.Trim();
+                if (ip.Length == 0) continue;
+                if (hostingLookup.TryGetValue(ip, out hostingId)) return true;
+            }
+            return false;
+        }
+
+        private void ApplyResolvedHostingToGrid(IReadOnlyDictionary<long, long> updates, IReadOnlyDictionary<long, string> resolvedNames)
+        {
+            // Обновляем значения столбца хостинга в таблице без полной перезагрузки данных
+            foreach (DataGridViewRow row in dg.Rows)
+            {
+                if (row.IsNewRow) continue;
+                long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+                if (siteId <= 0) continue;
+                if (!updates.ContainsKey(siteId)) continue;
+
+                if (resolvedNames.TryGetValue(siteId, out var hostingName))
+                    row.Cells[colHostingName.Index].Value = hostingName;
+                else
+                    row.Cells[colHostingName.Index].Value = string.Empty;
+            }
         }
     }
 }
