@@ -137,9 +137,18 @@ namespace CheckPosition
             notifyIcon.Visible = true;
             notifyIcon.DoubleClick += NotifyIcon_DoubleClick;
             notifyContextMenu = new ContextMenuStrip(); // Создаем контекстное меню для управления приложением из трея
+            
+            var showMenuItem = new ToolStripMenuItem("Открыть"); // Добавляем пункт выхода
+            showMenuItem.Click += (sender, e) => mOpen_Click(sender, e); // Используем уже существующую логику завершения приложения
+            notifyContextMenu.Items.Add(showMenuItem); // Регистрируем пункт в меню трея
+
+            var separator = new ToolStripSeparator();
+            notifyContextMenu.Items.Add(separator);
+
             var exitMenuItem = new ToolStripMenuItem("Выход"); // Добавляем пункт выхода
             exitMenuItem.Click += (sender, e) => mExit_Click(sender, e); // Используем уже существующую логику завершения приложения
             notifyContextMenu.Items.Add(exitMenuItem); // Регистрируем пункт в меню трея
+
             notifyIcon.ContextMenuStrip = notifyContextMenu; // Привязываем меню к иконке в трее
 
             foreach (string arg in args)
@@ -1091,6 +1100,13 @@ namespace CheckPosition
         {
             trueClose = true;
             Application.Exit();
+        }
+        private void mOpen_Click(object sender, EventArgs e)
+        {
+            this.Show();
+            this.WindowState = FormWindowState.Normal; // если было свернуто — разворачиваем
+            this.Activate();
+
         }
 
         private void mStop_Click(object sender, EventArgs e)
