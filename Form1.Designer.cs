@@ -51,6 +51,7 @@
             this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colHostingId = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colHostingName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -174,6 +175,7 @@
             this.colFoundPageUrl,
             this.colAction,
             this.colStatus,
+            this.colHostingId,
             this.colHostingName});
             this.dg.ContextMenuStrip = this.contextMenuTreeView;
             this.dg.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -260,6 +262,14 @@
             this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.colStatus.HeaderText = "Статус";
             this.colStatus.Name = "colStatus";
+            //
+            // colHostingId
+            //
+            // Добавляем скрытый столбец для хранения идентификатора хостинга
+            this.colHostingId.HeaderText = "HostingId";
+            this.colHostingId.Name = "colHostingId";
+            this.colHostingId.ReadOnly = true;
+            this.colHostingId.Visible = false;
             //
             // colHostingName
             //
@@ -568,6 +578,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colFoundPageUrl;
         private System.Windows.Forms.DataGridViewTextBoxColumn colAction;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colHostingId;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
         private System.Windows.Forms.ToolStripMenuItem mContinue;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
