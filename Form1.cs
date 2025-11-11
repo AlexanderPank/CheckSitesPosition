@@ -59,6 +59,9 @@ namespace CheckPosition
         // Создаем элементы управления для выбора хостинга из таблицы
         private ComboBox hostingSelector;
         private int hostingSelectorRowIndex = -1;
+        // Создаем элементы управления для выбора CPA сети из таблицы
+        private ComboBox cpaSelector;
+        private int cpaSelectorRowIndex = -1;
         // Создаем HTTP-клиент для загрузки страниц при поиске CPA
         private static readonly HttpClient cpaHttpClient = CreateCpaHttpClient();
 
@@ -92,6 +95,17 @@ namespace CheckPosition
             hostingSelector.LostFocus += HostingSelector_LostFocus;
             hostingSelector.KeyDown += HostingSelector_KeyDown;
             dg.Controls.Add(hostingSelector);
+            // Инициализируем выпадающий список для назначения CPA по двойному щелчку
+            cpaSelector = new ComboBox
+            {
+                Visible = false,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FormattingEnabled = true
+            };
+            cpaSelector.SelectionChangeCommitted += CpaSelector_SelectionChangeCommitted;
+            cpaSelector.LostFocus += CpaSelector_LostFocus;
+            cpaSelector.KeyDown += CpaSelector_KeyDown;
+            dg.Controls.Add(cpaSelector);
             dg.Scroll += dg_Scroll;
             dg.ColumnWidthChanged += dg_ColumnWidthChanged;
             dg.RowHeightChanged += dg_RowHeightChanged;
@@ -927,6 +941,13 @@ namespace CheckPosition
                 return;
             }
 
+            if (e.ColumnIndex == colCpaName.Index)
+            {
+                // Открываем выпадающий список выбора CPA сети для текущей строки
+                ShowCpaSelector(e.RowIndex);
+                return;
+            }
+
             if ((Control.ModifierKeys & Keys.Control) == 0) return;
             if (e.ColumnIndex != colPageUrl.Index) return;
             string url =  getStringValue(dg.Rows[e.RowIndex].Cells[colPageUrl.Index].Value);
@@ -1544,6 +1565,115 @@ namespace CheckPosition
             hostingSelectorRowIndex = -1;
         }
 
+        // Отображаем выпадающий список CPA и наполняем его данными справочника
+        private void ShowCpaSelector(int rowIndex)
+        {
+            HideCpaSelector(); // Сначала скрываем предыдущий комбобокс CPA
+            HideHostingSelector(); // Также убираем список хостингов, чтобы элементы не перекрывались
+
+            if (rowIndex < 0 || rowIndex >= dg.Rows.Count) return;
+            var row = dg.Rows[rowIndex];
+            if (row.IsNewRow) return;
+
+            List<CpaRecord> cpaRecords;
+            try
+            {
+                cpaRecords = database.LoadCpaList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось загрузить список CPA: {ex.Message}", "Назначение CPA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (cpaRecords == null || cpaRecords.Count == 0)
+            {
+                MessageBox.Show("Справочник CPA пуст. Добавьте записи перед назначением.", "Назначение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var selectorItems = new List<CpaRecord>(cpaRecords.Count + 1);
+            selectorItems.Add(new CpaRecord(0, "— Не выбрана —", string.Empty, string.Empty, string.Empty, string.Empty)); // Добавляем технический элемент для сброса CPA
+            selectorItems.AddRange(cpaRecords);
+
+            cpaSelector.ValueMember = nameof(CpaRecord.Id);
+            cpaSelector.DisplayMember = nameof(CpaRecord.Name);
+            cpaSelector.DataSource = selectorItems;
+            cpaSelectorRowIndex = rowIndex;
+
+            long currentCpaId = ParseCpaId(row.Cells[colCpaId.Index].Value);
+            if (currentCpaId > 0 && selectorItems.Any(item => item.Id == currentCpaId))
+                cpaSelector.SelectedValue = currentCpaId;
+            else
+                cpaSelector.SelectedIndex = 0;
+
+            Rectangle cellRect = dg.GetCellDisplayRectangle(colCpaName.Index, rowIndex, true);
+            cpaSelector.Bounds = cellRect;
+            cpaSelector.Visible = true;
+            cpaSelector.BringToFront();
+            cpaSelector.Focus();
+            cpaSelector.DroppedDown = true;
+        }
+
+        // Скрываем комбобокс CPA и очищаем привязку данных
+        private void HideCpaSelector()
+        {
+            if (cpaSelector == null) return;
+            cpaSelector.Visible = false;
+            cpaSelector.DroppedDown = false;
+            cpaSelector.DataSource = null;
+            cpaSelectorRowIndex = -1;
+        }
+
+        // Сохраняем выбранную CPA сеть и обновляем ячейки строки
+        private void CpaSelector_SelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (cpaSelectorRowIndex < 0 || cpaSelectorRowIndex >= dg.Rows.Count)
+            {
+                HideCpaSelector();
+                return;
+            }
+
+            var row = dg.Rows[cpaSelectorRowIndex];
+            long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+            long selectedCpaId = ParseCpaId(cpaSelector.SelectedValue);
+            string cpaName = selectedCpaId > 0 ? cpaSelector.Text ?? string.Empty : string.Empty; // Прячем подсказку при отсутствии CPA
+
+            row.Cells[colCpaId.Index].Value = selectedCpaId > 0 ? selectedCpaId.ToString() : string.Empty;
+            row.Cells[colCpaName.Index].Value = cpaName;
+
+            if (siteId > 0)
+            {
+                try
+                {
+                    database.UpdateSiteCpa(siteId, selectedCpaId > 0 ? (long?)selectedCpaId : null);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось сохранить выбранный CPA: {ex.Message}", "Назначение CPA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            HideCpaSelector();
+        }
+
+        // Скрываем список CPA при потере фокуса
+        private void CpaSelector_LostFocus(object sender, EventArgs e)
+        {
+            if (!cpaSelector.DroppedDown)
+                HideCpaSelector();
+        }
+
+        // Обрабатываем клавишу Escape для отмены выбора CPA
+        private void CpaSelector_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                HideCpaSelector();
+                e.Handled = true;
+            }
+        }
+
         // Обрабатываем выбор элемента списка и сохраняем его в базе
         private void HostingSelector_SelectionChangeCommitted(object sender, EventArgs e)
         {
@@ -1575,6 +1705,7 @@ namespace CheckPosition
             }
 
             HideHostingSelector();
+            HideCpaSelector(); // Дополнительно закрываем список CPA, чтобы не было зависших элементов
         }
 
         // Прячем список при потере фокуса, чтобы он не зависал на форме
@@ -1590,6 +1721,7 @@ namespace CheckPosition
             if (e.KeyCode == Keys.Escape)
             {
                 HideHostingSelector();
+                HideCpaSelector(); // Одновременно скрываем список CPA для единообразия поведения
                 e.Handled = true;
             }
         }
@@ -1598,28 +1730,44 @@ namespace CheckPosition
         private void dg_Scroll(object sender, ScrollEventArgs e)
         {
             HideHostingSelector();
+            HideCpaSelector(); // Одновременно скрываем список выбора CPA
         }
 
         // Скрываем комбобокс при изменении ширины столбцов
         private void dg_ColumnWidthChanged(object sender, DataGridViewColumnEventArgs e)
         {
             HideHostingSelector();
+            HideCpaSelector(); // Одновременно скрываем список выбора CPA
         }
 
         // Скрываем комбобокс при изменении высоты строк
         private void dg_RowHeightChanged(object sender, DataGridViewRowEventArgs e)
         {
             HideHostingSelector();
+            HideCpaSelector(); // Одновременно скрываем список выбора CPA
         }
 
         // Сбрасываем комбобокс при переходе на другую ячейку
         private void dg_CellLeave(object sender, DataGridViewCellEventArgs e)
         {
             HideHostingSelector();
+            HideCpaSelector(); // Одновременно скрываем список выбора CPA
         }
 
         // Унифицируем преобразование значения столбца в числовой идентификатор хостинга
         private static long ParseHostingId(object value)
+        {
+            return ParseIdentifier(value); // Используем общее преобразование идентификаторов
+        }
+
+        // Унифицируем преобразование значения столбца CPA в числовой идентификатор
+        private static long ParseCpaId(object value)
+        {
+            return ParseIdentifier(value); // Используем общее преобразование идентификаторов
+        }
+
+        // Обобщаем преобразование произвольного значения к целочисленному идентификатору
+        private static long ParseIdentifier(object value)
         {
             if (value == null) return 0;
             if (value is long longValue) return longValue;
