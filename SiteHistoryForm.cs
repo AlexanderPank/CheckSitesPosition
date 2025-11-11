@@ -201,7 +201,7 @@ namespace CheckPosition
                     .Select(point => (double)point.MiddlePosition.Value)
                     .ToArray();
 
-                double? middleAverage = middleValues.Length == 0 ? null : middleValues.Average();
+                double middleAverage = middleValues.Length == 0 ? 0 : middleValues.Average();
                 result.Add(new MonthlyHistoryPoint(group.Key, positionAverage, middleAverage));
             }
 
@@ -221,6 +221,11 @@ namespace CheckPosition
             public DateTime Month { get; }
             public double PositionAverage { get; }
             public double? MiddlePositionAverage { get; }
+        }
+
+        private void historyChart_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
