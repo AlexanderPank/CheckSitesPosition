@@ -41,21 +41,6 @@
             this.rowDown = new System.Windows.Forms.ToolStripMenuItem();
             this.panel2 = new System.Windows.Forms.Panel();
             this.dg = new System.Windows.Forms.DataGridView();
-            this.colID = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colDateCheck = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colKeyword = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colCurrentPosition = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colMidCurrent = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colLastPosition = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colMidPrev = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colCpaId = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colCpaName = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colHostingId = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.colHostingName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
@@ -84,6 +69,21 @@
             this.bSearch = new System.Windows.Forms.ToolStripMenuItem();
             this.sd = new System.Windows.Forms.SaveFileDialog();
             this.od = new System.Windows.Forms.OpenFileDialog();
+            this.colID = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colDateCheck = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colKeyword = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCurrentPosition = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colMidCurrent = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLastPosition = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colMidPrev = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCpaId = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCpaName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colHostingId = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colHostingName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.contextMenuTreeView.SuspendLayout();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).BeginInit();
@@ -118,15 +118,14 @@
             this.determineHostingContextMenuItem.Size = new System.Drawing.Size(241, 22);
             this.determineHostingContextMenuItem.Text = "Определить хостинг";
             this.determineHostingContextMenuItem.Click += new System.EventHandler(this.determineHostingContextMenuItem_Click);
-            //
+            // 
             // determineCpaContextMenuItem
-            //
-            // Добавляем пункт контекстного меню для определения CPA
+            // 
             this.determineCpaContextMenuItem.Name = "determineCpaContextMenuItem";
             this.determineCpaContextMenuItem.Size = new System.Drawing.Size(241, 22);
             this.determineCpaContextMenuItem.Text = "Определить CPA";
             this.determineCpaContextMenuItem.Click += new System.EventHandler(this.determineCpaContextMenuItem_Click);
-            //
+            // 
             // showHistoryMenuItem
             // 
             this.showHistoryMenuItem.Name = "showHistoryMenuItem";
@@ -202,111 +201,6 @@
             this.dg.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dg_CellDoubleClick);
             this.dg.CellEndEdit += new System.Windows.Forms.DataGridViewCellEventHandler(this.dg_CellEndEdit);
             this.dg.UserDeletingRow += new System.Windows.Forms.DataGridViewRowCancelEventHandler(this.dg_UserDeletingRow);
-            // 
-            // colID
-            // 
-            this.colID.HeaderText = "id";
-            this.colID.Name = "colID";
-            this.colID.Visible = false;
-            // 
-            // colDateCheck
-            // 
-            this.colDateCheck.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colDateCheck.HeaderText = "Дата";
-            this.colDateCheck.Name = "colDateCheck";
-            this.colDateCheck.ReadOnly = true;
-            // 
-            // colPageUrl
-            // 
-            dataGridViewCellStyle1.Font = new System.Drawing.Font("Verdana", 9F, System.Drawing.FontStyle.Underline);
-            dataGridViewCellStyle1.ForeColor = System.Drawing.Color.Blue;
-            this.colPageUrl.DefaultCellStyle = dataGridViewCellStyle1;
-            this.colPageUrl.HeaderText = "Url";
-            this.colPageUrl.Name = "colPageUrl";
-            // 
-            // colKeyword
-            // 
-            this.colKeyword.HeaderText = "Ключевая фраза";
-            this.colKeyword.Name = "colKeyword";
-            // 
-            // colCurrentPosition
-            // 
-            this.colCurrentPosition.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colCurrentPosition.HeaderText = "Тек.";
-            this.colCurrentPosition.Name = "colCurrentPosition";
-            this.colCurrentPosition.ReadOnly = true;
-            this.colCurrentPosition.Width = 50;
-            // 
-            // colMidCurrent
-            // 
-            this.colMidCurrent.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colMidCurrent.HeaderText = "Ср.";
-            this.colMidCurrent.Name = "colMidCurrent";
-            this.colMidCurrent.ReadOnly = true;
-            this.colMidCurrent.Width = 50;
-            // 
-            // colLastPosition
-            // 
-            this.colLastPosition.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colLastPosition.HeaderText = "Пред.";
-            this.colLastPosition.Name = "colLastPosition";
-            this.colLastPosition.ReadOnly = true;
-            this.colLastPosition.Width = 50;
-            // 
-            // colMidPrev
-            // 
-            this.colMidPrev.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colMidPrev.HeaderText = "Пр.ср.";
-            this.colMidPrev.Name = "colMidPrev";
-            this.colMidPrev.Width = 60;
-            // 
-            // colFoundPageUrl
-            // 
-            this.colFoundPageUrl.HeaderText = "URL в поиске";
-            this.colFoundPageUrl.Name = "colFoundPageUrl";
-            // 
-            // colAction
-            // 
-            this.colAction.HeaderText = "Действия";
-            this.colAction.Name = "colAction";
-            // 
-            // colStatus
-            //
-            this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colStatus.HeaderText = "Статус";
-            this.colStatus.Name = "colStatus";
-            //
-            // colCpaId
-            //
-            // Добавляем скрытый столбец для хранения идентификатора CPA
-            this.colCpaId.HeaderText = "CpaId";
-            this.colCpaId.Name = "colCpaId";
-            this.colCpaId.ReadOnly = true;
-            this.colCpaId.Visible = false;
-            //
-            // colCpaName
-            //
-            // Добавляем столбец для отображения названия CPA сети
-            this.colCpaName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colCpaName.HeaderText = "CPA";
-            this.colCpaName.Name = "colCpaName";
-            this.colCpaName.ReadOnly = true;
-            this.colCpaName.Width = 160;
-            //
-            // colHostingId
-            //
-            this.colHostingId.HeaderText = "HostingId";
-            this.colHostingId.Name = "colHostingId";
-            this.colHostingId.ReadOnly = true;
-            this.colHostingId.Visible = false;
-            // 
-            // colHostingName
-            // 
-            this.colHostingName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
-            this.colHostingName.HeaderText = "Хостинг";
-            this.colHostingName.Name = "colHostingName";
-            this.colHostingName.ReadOnly = true;
-            this.colHostingName.Width = 160;
             // 
             // statusStrip
             // 
@@ -483,15 +377,14 @@
             this.determineHostingMenuItem.Size = new System.Drawing.Size(296, 22);
             this.determineHostingMenuItem.Text = "Определить хостинг";
             this.determineHostingMenuItem.Click += new System.EventHandler(this.determineHostingMenuItem_Click);
-            //
+            // 
             // determineCpaMenuItem
-            //
-            // Добавляем пункт меню для запуска определения CPA по всем сайтам
+            // 
             this.determineCpaMenuItem.Name = "determineCpaMenuItem";
             this.determineCpaMenuItem.Size = new System.Drawing.Size(296, 22);
             this.determineCpaMenuItem.Text = "Определить CPA";
             this.determineCpaMenuItem.Click += new System.EventHandler(this.determineCpaMenuItem_Click);
-            //
+            // 
             // toolStripMenuItem3
             // 
             this.toolStripMenuItem3.Name = "toolStripMenuItem3";
@@ -527,6 +420,107 @@
             // od
             // 
             this.od.Filter = "Check Position Project|*.chps|All Files|*.*";
+            // 
+            // colID
+            // 
+            this.colID.HeaderText = "id";
+            this.colID.Name = "colID";
+            this.colID.Visible = false;
+            // 
+            // colDateCheck
+            // 
+            this.colDateCheck.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colDateCheck.HeaderText = "Дата";
+            this.colDateCheck.Name = "colDateCheck";
+            this.colDateCheck.ReadOnly = true;
+            // 
+            // colPageUrl
+            // 
+            dataGridViewCellStyle1.Font = new System.Drawing.Font("Verdana", 9F, System.Drawing.FontStyle.Underline);
+            dataGridViewCellStyle1.ForeColor = System.Drawing.Color.Blue;
+            this.colPageUrl.DefaultCellStyle = dataGridViewCellStyle1;
+            this.colPageUrl.HeaderText = "Url";
+            this.colPageUrl.Name = "colPageUrl";
+            // 
+            // colKeyword
+            // 
+            this.colKeyword.HeaderText = "Ключевая фраза";
+            this.colKeyword.Name = "colKeyword";
+            // 
+            // colCurrentPosition
+            // 
+            this.colCurrentPosition.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colCurrentPosition.HeaderText = "Тек.";
+            this.colCurrentPosition.Name = "colCurrentPosition";
+            this.colCurrentPosition.ReadOnly = true;
+            this.colCurrentPosition.Width = 50;
+            // 
+            // colMidCurrent
+            // 
+            this.colMidCurrent.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colMidCurrent.HeaderText = "Ср.";
+            this.colMidCurrent.Name = "colMidCurrent";
+            this.colMidCurrent.ReadOnly = true;
+            this.colMidCurrent.Width = 50;
+            // 
+            // colLastPosition
+            // 
+            this.colLastPosition.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colLastPosition.HeaderText = "Пред.";
+            this.colLastPosition.Name = "colLastPosition";
+            this.colLastPosition.ReadOnly = true;
+            this.colLastPosition.Width = 50;
+            // 
+            // colMidPrev
+            // 
+            this.colMidPrev.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colMidPrev.HeaderText = "Пр.ср.";
+            this.colMidPrev.Name = "colMidPrev";
+            this.colMidPrev.Width = 60;
+            // 
+            // colFoundPageUrl
+            // 
+            this.colFoundPageUrl.HeaderText = "URL в поиске";
+            this.colFoundPageUrl.Name = "colFoundPageUrl";
+            // 
+            // colAction
+            // 
+            this.colAction.HeaderText = "Действия";
+            this.colAction.Name = "colAction";
+            // 
+            // colStatus
+            // 
+            this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colStatus.HeaderText = "Статус";
+            this.colStatus.Name = "colStatus";
+            // 
+            // colCpaId
+            // 
+            this.colCpaId.HeaderText = "CpaId";
+            this.colCpaId.Name = "colCpaId";
+            this.colCpaId.ReadOnly = true;
+            this.colCpaId.Visible = false;
+            // 
+            // colCpaName
+            // 
+            this.colCpaName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colCpaName.HeaderText = "CPA";
+            this.colCpaName.Name = "colCpaName";
+            this.colCpaName.ReadOnly = true;
+            // 
+            // colHostingId
+            // 
+            this.colHostingId.HeaderText = "HostingId";
+            this.colHostingId.Name = "colHostingId";
+            this.colHostingId.ReadOnly = true;
+            this.colHostingId.Visible = false;
+            // 
+            // colHostingName
+            // 
+            this.colHostingName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colHostingName.HeaderText = "Хостинг";
+            this.colHostingName.Name = "colHostingName";
+            this.colHostingName.ReadOnly = true;
             // 
             // Form1
             // 
@@ -595,6 +589,8 @@
         private System.Windows.Forms.ToolStripMenuItem determineCpaMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem3;
         private System.Windows.Forms.ToolStripMenuItem bGetSiteList;
+        private System.Windows.Forms.ToolStripMenuItem mContinue;
+        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
         private System.Windows.Forms.DataGridViewTextBoxColumn colID;
         private System.Windows.Forms.DataGridViewTextBoxColumn colDateCheck;
         private System.Windows.Forms.DataGridViewTextBoxColumn colPageUrl;
@@ -610,8 +606,6 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colCpaName;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingId;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
-        private System.Windows.Forms.ToolStripMenuItem mContinue;
-        private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
     }
 }
 

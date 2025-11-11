@@ -1334,7 +1334,7 @@ namespace CheckPosition
             if (string.IsNullOrWhiteSpace(pageAddress)) return string.Empty;
 
             string trimmed = pageAddress.Trim();
-            string[] candidates = trimmed.Contains("://", StringComparison.Ordinal)
+            string[] candidates = trimmed.Contains("://")
                 ? new[] { trimmed }
                 : new[] { "https://" + trimmed, "http://" + trimmed };
 
