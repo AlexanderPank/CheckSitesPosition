@@ -33,6 +33,7 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.contextMenuTreeView = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.checkRow = new System.Windows.Forms.ToolStripMenuItem();
+            this.determineHostingContextMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showHistoryMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
@@ -50,6 +51,7 @@
             this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colHostingName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.statusProgressBar = new System.Windows.Forms.ToolStripProgressBar();
@@ -69,6 +71,7 @@
             this.mStart = new System.Windows.Forms.ToolStripMenuItem();
             this.mContinue = new System.Windows.Forms.ToolStripMenuItem();
             this.mStop = new System.Windows.Forms.ToolStripMenuItem();
+            this.determineHostingMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripSeparator();
             this.bGetSiteList = new System.Windows.Forms.ToolStripMenuItem();
             this.правкиToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -89,6 +92,7 @@
             // Регистрируем пункты контекстного меню списка проверок
             this.contextMenuTreeView.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.checkRow,
+            this.determineHostingContextMenuItem,
             this.showHistoryMenuItem,
             this.toolStripMenuItem2,
             this.rowUp,
@@ -103,6 +107,14 @@
             this.checkRow.Size = new System.Drawing.Size(241, 22);
             this.checkRow.Text = "Проверить позиции страницы";
             this.checkRow.Click += new System.EventHandler(this.checkRow_Click);
+            //
+            // determineHostingContextMenuItem
+            //
+            // Добавляем пункт контекстного меню для определения хостинга выбранной строки
+            this.determineHostingContextMenuItem.Name = "determineHostingContextMenuItem";
+            this.determineHostingContextMenuItem.Size = new System.Drawing.Size(241, 22);
+            this.determineHostingContextMenuItem.Text = "Определить хостинг";
+            this.determineHostingContextMenuItem.Click += new System.EventHandler(this.determineHostingContextMenuItem_Click);
             //
             // showHistoryMenuItem
             //
@@ -161,7 +173,8 @@
             this.colMidPrev,
             this.colFoundPageUrl,
             this.colAction,
-            this.colStatus});
+            this.colStatus,
+            this.colHostingName});
             this.dg.ContextMenuStrip = this.contextMenuTreeView;
             this.dg.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dg.Location = new System.Drawing.Point(3, 0);
@@ -247,9 +260,18 @@
             this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.colStatus.HeaderText = "Статус";
             this.colStatus.Name = "colStatus";
-            // 
+            //
+            // colHostingName
+            //
+            // Добавляем столбец для отображения наименования хостинга
+            this.colHostingName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colHostingName.HeaderText = "Хостинг";
+            this.colHostingName.Name = "colHostingName";
+            this.colHostingName.ReadOnly = true;
+            this.colHostingName.Width = 160;
+            //
             // statusStrip
-            // 
+            //
             this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.statusLabel,
             this.statusProgressBar});
@@ -381,6 +403,7 @@
             this.mStart,
             this.mContinue,
             this.mStop,
+            this.determineHostingMenuItem,
             this.toolStripMenuItem3,
             this.bGetSiteList});
             this.сканироватьToolStripMenuItem.Name = "сканироватьToolStripMenuItem";
@@ -409,6 +432,14 @@
             this.mStop.Size = new System.Drawing.Size(296, 22);
             this.mStop.Text = "Остановить проверку";
             this.mStop.Click += new System.EventHandler(this.mStop_Click);
+            //
+            // determineHostingMenuItem
+            //
+            // Добавляем пункт меню запуска массового определения хостинга
+            this.determineHostingMenuItem.Name = "determineHostingMenuItem";
+            this.determineHostingMenuItem.Size = new System.Drawing.Size(296, 22);
+            this.determineHostingMenuItem.Text = "Определить хостинг";
+            this.determineHostingMenuItem.Click += new System.EventHandler(this.determineHostingMenuItem_Click);
             // 
             // toolStripMenuItem3
             // 
@@ -505,6 +536,7 @@
         private System.Windows.Forms.SaveFileDialog sd;
         private System.Windows.Forms.OpenFileDialog od;
         private System.Windows.Forms.ToolStripMenuItem checkRow;
+        private System.Windows.Forms.ToolStripMenuItem determineHostingContextMenuItem;
         // Элемент контекстного меню для открытия истории позиций
         private System.Windows.Forms.ToolStripMenuItem showHistoryMenuItem;
         private System.Windows.Forms.StatusStrip statusStrip;
@@ -522,6 +554,7 @@
         private System.Windows.Forms.ToolStripMenuItem загрузитьКоличестовСделокИзAdmintadToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem правкиToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem bSearch;
+        private System.Windows.Forms.ToolStripMenuItem determineHostingMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem3;
         private System.Windows.Forms.ToolStripMenuItem bGetSiteList;
         private System.Windows.Forms.DataGridViewTextBoxColumn colID;
@@ -535,6 +568,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colFoundPageUrl;
         private System.Windows.Forms.DataGridViewTextBoxColumn colAction;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
         private System.Windows.Forms.ToolStripMenuItem mContinue;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
     }

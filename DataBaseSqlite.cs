@@ -141,23 +141,40 @@ namespace CheckPosition
         public void getTableData(DataGridView dg, string tableName) {
             try
             {
+                // Формируем запрос с учетом необходимости подтянуть название хостинга для таблицы сайтов
                 dg.Rows.Clear();
-
-                DataTable dTable = new DataTable();
-                string query = $"SELECT * FROM {tableName} ORDER BY id";
-
-                var command = _connection.CreateCommand();
-                command.CommandText = query;
-                using (var reader = command.ExecuteReader())
+                string query;
+                if (string.Equals(tableName, "sites", StringComparison.OrdinalIgnoreCase))
                 {
-                    while (reader.Read())
+                    query = "SELECT s.id, s.date, s.page_address, s.query, s.position_current, s.position_middle_current, " +
+                            "s.position_previous, s.position_midlle_previous, s.url_in_search, s.comment, s.status, " +
+                            "IFNULL(h.name, '') AS hosting_name FROM sites s LEFT JOIN hosting_list h ON h.id = s.hosting_id " +
+                            "ORDER BY s.id;";
+                }
+                else
+                {
+                    query = $"SELECT * FROM {tableName} ORDER BY id";
+                }
+
+                lock (_dbSync)
+                {
+                    EnsureConnectionOpen();
+                    using (var command = _connection.CreateCommand())
                     {
-                        List<string> list = new List<string>(); 
-                        for(int i=0;  i<reader.FieldCount; i++)
+                        command.CommandText = query;
+                        using (var reader = command.ExecuteReader())
                         {
-                            list.Add(reader.GetString(i));
+                            while (reader.Read())
+                            {
+                                // Собираем значения строки, корректно обрабатывая пустые значения
+                                List<string> list = new List<string>();
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    list.Add(reader.IsDBNull(i) ? string.Empty : reader.GetValue(i).ToString());
+                                }
+                                dg.Rows.Add(list.ToArray());
+                            }
                         }
-                        dg.Rows.Add(list.ToArray());
                     }
                 }
 
@@ -167,6 +184,107 @@ namespace CheckPosition
                 MessageBox.Show("Error: " + ex.Message);
             }
 
+        }
+
+        // Загружаем домены с IP-адресами для определения хостинга
+        public List<DomainRecord> LoadDomainsWithIp()
+        {
+            var result = new List<DomainRecord>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT id, name, rus_name, ip FROM domains ORDER BY id;";
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string name = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            string rusName = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+                            string ip = reader.IsDBNull(3) ? string.Empty : reader.GetString(3);
+                            result.Add(new DomainRecord(id, name, rusName, ip));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Загружаем список сайтов для которых требуется определить хостинг
+        public List<SiteHostingCandidate> LoadSitesForHostingDetection(IReadOnlyCollection<long> siteIds)
+        {
+            var result = new List<SiteHostingCandidate>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    if (siteIds != null && siteIds.Count > 0)
+                    {
+                        // Готовим параметризованный список идентификаторов для выборки
+                        int index = 0;
+                        var placeholders = new List<string>();
+                        foreach (var siteId in siteIds)
+                        {
+                            string parameterName = "$id" + index++;
+                            placeholders.Add(parameterName);
+                            command.Parameters.AddWithValue(parameterName, siteId);
+                        }
+                        string inClause = string.Join(",", placeholders);
+                        command.CommandText = $"SELECT id, page_address, hosting_id FROM sites WHERE id IN ({inClause}) ORDER BY id;";
+                    }
+                    else
+                    {
+                        command.CommandText = "SELECT id, page_address, hosting_id FROM sites ORDER BY id;";
+                    }
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string pageAddress = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            long hostingId = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
+                            result.Add(new SiteHostingCandidate(id, pageAddress, hostingId));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        // Обновляем хостинг для множества сайтов в рамках одной транзакции
+        public void UpdateSiteHostingBulk(IReadOnlyDictionary<long, long> updates)
+        {
+            if (updates == null || updates.Count == 0) return;
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var transaction = _connection.BeginTransaction())
+                using (var command = _connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText = "UPDATE sites SET hosting_id = $hostingId WHERE id = $id;";
+                    var idParameter = command.CreateParameter();
+                    idParameter.ParameterName = "$id";
+                    command.Parameters.Add(idParameter);
+                    var hostingParameter = command.CreateParameter();
+                    hostingParameter.ParameterName = "$hostingId";
+                    command.Parameters.Add(hostingParameter);
+
+                    foreach (var update in updates)
+                    {
+                        idParameter.Value = update.Key;
+                        hostingParameter.Value = update.Value;
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+            }
         }
 
         public int getIdDomainByName(string dname)
@@ -435,6 +553,38 @@ namespace CheckPosition
         public long Id { get; }
         public string Name { get; }
         public string Ip { get; }
+    }
+
+    // Добавляем структуру-обертку для доменов, содержащую русские и punycode-наименования
+    public sealed class DomainRecord
+    {
+        public DomainRecord(long id, string name, string rusName, string ip)
+        {
+            Id = id;
+            Name = name ?? string.Empty;
+            RusName = rusName ?? string.Empty;
+            Ip = ip ?? string.Empty;
+        }
+
+        public long Id { get; }
+        public string Name { get; }
+        public string RusName { get; }
+        public string Ip { get; }
+    }
+
+    // Добавляем структуру-обертку для сайтов при определении хостинга
+    public sealed class SiteHostingCandidate
+    {
+        public SiteHostingCandidate(long id, string pageAddress, long currentHostingId)
+        {
+            Id = id;
+            PageAddress = pageAddress ?? string.Empty;
+            CurrentHostingId = currentHostingId;
+        }
+
+        public long Id { get; }
+        public string PageAddress { get; }
+        public long CurrentHostingId { get; }
     }
 
     // Добавляем структуру-обертку для записей cpa_list
