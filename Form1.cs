@@ -55,6 +55,9 @@ namespace CheckPosition
         };
         // Определяем разделители IP-адресов для поиска в списке хостингов
         private static readonly char[] HostingIpSeparators = new[] { ' ', ',', ';', '\t', '\r', '\n' };
+        // Создаем элементы управления для выбора хостинга из таблицы
+        private ComboBox hostingSelector;
+        private int hostingSelectorRowIndex = -1;
 
         public Form1(string[] args, string title)
         {
@@ -74,6 +77,22 @@ namespace CheckPosition
             this.getStringValue = Helper.getStringValue;
             string[] deletedMessage = new string[] { "Данное объявление было удалено, перемещено или временно приостановлено" };
             IdnMapping idn = new IdnMapping();
+
+            // Инициализируем выпадающий список для назначения хостинга по двойному щелчку
+            hostingSelector = new ComboBox
+            {
+                Visible = false,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FormattingEnabled = true
+            };
+            hostingSelector.SelectionChangeCommitted += HostingSelector_SelectionChangeCommitted;
+            hostingSelector.LostFocus += HostingSelector_LostFocus;
+            hostingSelector.KeyDown += HostingSelector_KeyDown;
+            dg.Controls.Add(hostingSelector);
+            dg.Scroll += dg_Scroll;
+            dg.ColumnWidthChanged += dg_ColumnWidthChanged;
+            dg.RowHeightChanged += dg_RowHeightChanged;
+            dg.CellLeave += dg_CellLeave;
         
             searchForm = new fSearchReplace();
          
@@ -711,6 +730,9 @@ namespace CheckPosition
             string dateNow      = getStringValue(row.Cells[colDateCheck.Index].Value);
             string coment       = getStringValue(row.Cells[colAction.Index].Value) ;
             string status       = getStringValue(row.Cells[colStatus.Index].Value) ;
+            // Извлекаем выбранный идентификатор хостинга из скрытого столбца
+            long hostingId = ParseHostingId(row.Cells[colHostingId.Index].Value);
+            long effectiveSiteId = id;
 
             if (id != -1)
                 this.database.updateSite(id, dateNow, url, keyword, position, middle_position,  prev_pos, middle_prev_pos, foundPageUrl, coment, status);
@@ -718,7 +740,23 @@ namespace CheckPosition
             {
                long id_row =  this.database.appendSite(dateNow, url, keyword, position, prev_pos, foundPageUrl, coment, status);
                 if (id_row >= 0)
+                {
                     row.Cells[colID.Index].Value = id_row;
+                    effectiveSiteId = id_row;
+                }
+            }
+
+            if (effectiveSiteId > 0)
+            {
+                try
+                {
+                    // Обновляем поле hosting_id сразу после сохранения основной части строки
+                    database.UpdateSiteHosting(effectiveSiteId, hostingId > 0 ? (long?)hostingId : null);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось сохранить выбранный хостинг: {ex.Message}", "Назначение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
@@ -856,6 +894,15 @@ namespace CheckPosition
 
         private void dg_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            if (e.ColumnIndex == colHostingName.Index)
+            {
+                // Открываем выпадающий список выбора хостинга для текущей строки
+                ShowHostingSelector(e.RowIndex);
+                return;
+            }
+
             if ((Control.ModifierKeys & Keys.Control) == 0) return;
             if (e.ColumnIndex != colPageUrl.Index) return;
             string url =  getStringValue(dg.Rows[e.RowIndex].Cells[colPageUrl.Index].Value);
@@ -1246,6 +1293,147 @@ namespace CheckPosition
             return false;
         }
 
+        // Показываем комбобокс со списком хостингов поверх выбранной ячейки
+        private void ShowHostingSelector(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= dg.Rows.Count) return;
+            var row = dg.Rows[rowIndex];
+            if (row.IsNewRow) return;
+
+            List<HostingRecord> hostings;
+            try
+            {
+                hostings = database.LoadHostingList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось загрузить список хостингов: {ex.Message}", "Назначение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (hostings == null || hostings.Count == 0)
+            {
+                MessageBox.Show("Справочник хостингов пуст. Добавьте записи перед назначением.", "Назначение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            hostings.Insert(0, new HostingRecord(0, "— Не выбран —", string.Empty));
+
+            hostingSelector.ValueMember = nameof(HostingRecord.Id);
+            hostingSelector.DisplayMember = nameof(HostingRecord.Name);
+            hostingSelector.DataSource = hostings;
+            hostingSelectorRowIndex = rowIndex;
+
+            long currentHostingId = ParseHostingId(row.Cells[colHostingId.Index].Value);
+            if (currentHostingId > 0 && hostings.Any(h => h.Id == currentHostingId))
+                hostingSelector.SelectedValue = currentHostingId;
+            else
+                hostingSelector.SelectedIndex = 0;
+
+            Rectangle cellRect = dg.GetCellDisplayRectangle(colHostingName.Index, rowIndex, true);
+            hostingSelector.Bounds = cellRect;
+            hostingSelector.Visible = true;
+            hostingSelector.BringToFront();
+            hostingSelector.Focus();
+            hostingSelector.DroppedDown = true;
+        }
+
+        // Скрываем комбобокс и очищаем привязанные данные
+        private void HideHostingSelector()
+        {
+            if (hostingSelector == null) return;
+            hostingSelector.Visible = false;
+            hostingSelector.DroppedDown = false;
+            hostingSelector.DataSource = null;
+            hostingSelectorRowIndex = -1;
+        }
+
+        // Обрабатываем выбор элемента списка и сохраняем его в базе
+        private void HostingSelector_SelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (hostingSelectorRowIndex < 0 || hostingSelectorRowIndex >= dg.Rows.Count)
+            {
+                HideHostingSelector();
+                return;
+            }
+
+            var row = dg.Rows[hostingSelectorRowIndex];
+            long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+            long selectedHostingId = ParseHostingId(hostingSelector.SelectedValue);
+            // Прячем служебную подпись "Не выбран" и оставляем поле пустым
+            string hostingName = selectedHostingId > 0 ? hostingSelector.Text ?? string.Empty : string.Empty;
+
+            row.Cells[colHostingId.Index].Value = selectedHostingId > 0 ? selectedHostingId.ToString() : string.Empty;
+            row.Cells[colHostingName.Index].Value = hostingName;
+
+            if (siteId > 0)
+            {
+                try
+                {
+                    database.UpdateSiteHosting(siteId, selectedHostingId > 0 ? (long?)selectedHostingId : null);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Не удалось сохранить выбранный хостинг: {ex.Message}", "Назначение хостинга", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            HideHostingSelector();
+        }
+
+        // Прячем список при потере фокуса, чтобы он не зависал на форме
+        private void HostingSelector_LostFocus(object sender, EventArgs e)
+        {
+            if (!hostingSelector.DroppedDown)
+                HideHostingSelector();
+        }
+
+        // Реагируем на клавишу Escape для отмены выбора
+        private void HostingSelector_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                HideHostingSelector();
+                e.Handled = true;
+            }
+        }
+
+        // Скрываем комбобокс при прокрутке таблицы
+        private void dg_Scroll(object sender, ScrollEventArgs e)
+        {
+            HideHostingSelector();
+        }
+
+        // Скрываем комбобокс при изменении ширины столбцов
+        private void dg_ColumnWidthChanged(object sender, DataGridViewColumnEventArgs e)
+        {
+            HideHostingSelector();
+        }
+
+        // Скрываем комбобокс при изменении высоты строк
+        private void dg_RowHeightChanged(object sender, DataGridViewRowEventArgs e)
+        {
+            HideHostingSelector();
+        }
+
+        // Сбрасываем комбобокс при переходе на другую ячейку
+        private void dg_CellLeave(object sender, DataGridViewCellEventArgs e)
+        {
+            HideHostingSelector();
+        }
+
+        // Унифицируем преобразование значения столбца в числовой идентификатор хостинга
+        private static long ParseHostingId(object value)
+        {
+            if (value == null) return 0;
+            if (value is long longValue) return longValue;
+            if (value is int intValue) return intValue;
+            if (value is short shortValue) return shortValue;
+            if (value is string text && long.TryParse(text, out var parsed)) return parsed;
+            if (long.TryParse(Convert.ToString(value), out var converted)) return converted;
+            return 0;
+        }
+
         private void ApplyResolvedHostingToGrid(IReadOnlyDictionary<long, long> updates, IReadOnlyDictionary<long, string> resolvedNames)
         {
             // Обновляем значения столбца хостинга в таблице без полной перезагрузки данных
@@ -1255,6 +1443,10 @@ namespace CheckPosition
                 long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
                 if (siteId <= 0) continue;
                 if (!updates.ContainsKey(siteId)) continue;
+
+                // Обновляем скрытый идентификатор выбранного хостинга
+                if (updates.TryGetValue(siteId, out var hostingId))
+                    row.Cells[colHostingId.Index].Value = hostingId > 0 ? hostingId.ToString() : string.Empty;
 
                 if (resolvedNames.TryGetValue(siteId, out var hostingName))
                     row.Cells[colHostingName.Index].Value = hostingName;

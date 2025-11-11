@@ -146,10 +146,11 @@ namespace CheckPosition
                 string query;
                 if (string.Equals(tableName, "sites", StringComparison.OrdinalIgnoreCase))
                 {
+                    // Формируем запрос, дополнительно подтягивающий идентификатор и название хостинга для каждой записи сайта
                     query = "SELECT s.id, s.date, s.page_address, s.query, s.position_current, s.position_middle_current, " +
                             "s.position_previous, s.position_midlle_previous, s.url_in_search, s.comment, s.status, " +
-                            "IFNULL(h.name, '') AS hosting_name FROM sites s LEFT JOIN hosting_list h ON h.id = s.hosting_id " +
-                            "ORDER BY s.id;";
+                            "COALESCE(s.hosting_id, 0) AS hosting_id, IFNULL(h.name, '') AS hosting_name FROM sites s " +
+                            "LEFT JOIN hosting_list h ON h.id = s.hosting_id ORDER BY s.id;";
                 }
                 else
                 {
@@ -283,6 +284,25 @@ namespace CheckPosition
                     }
 
                     transaction.Commit();
+                }
+            }
+        }
+
+        // Добавляем метод точечного обновления хостинга сайта с безопасными параметрами
+        public void UpdateSiteHosting(long siteId, long? hostingId)
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "UPDATE sites SET hosting_id = $hostingId WHERE id = $siteId;";
+                    command.Parameters.AddWithValue("$siteId", siteId);
+                    var hostingParameter = command.CreateParameter();
+                    hostingParameter.ParameterName = "$hostingId";
+                    hostingParameter.Value = hostingId.HasValue && hostingId.Value > 0 ? (object)hostingId.Value : DBNull.Value;
+                    command.Parameters.Add(hostingParameter);
+                    command.ExecuteNonQuery();
                 }
             }
         }
