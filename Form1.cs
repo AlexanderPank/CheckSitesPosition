@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -58,6 +59,8 @@ namespace CheckPosition
         // Создаем элементы управления для выбора хостинга из таблицы
         private ComboBox hostingSelector;
         private int hostingSelectorRowIndex = -1;
+        // Создаем HTTP-клиент для загрузки страниц при поиске CPA
+        private static readonly HttpClient cpaHttpClient = CreateCpaHttpClient();
 
         public Form1(string[] args, string title)
         {
@@ -140,6 +143,27 @@ namespace CheckPosition
             AddToStartup();
           //  test();
             InitializePeriodicCheckTimer();
+        }
+
+        // Создаем и настраиваем HTTP-клиент для скачивания страниц при определении CPA
+        private static HttpClient CreateCpaHttpClient()
+        {
+            var handler = new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+
+            var client = new HttpClient(handler, disposeHandler: true)
+            {
+                Timeout = TimeSpan.FromSeconds(30)
+            };
+
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("CheckPosition/1.0 (+https://example.local)");
+            client.DefaultRequestHeaders.AcceptEncoding.ParseAdd("gzip, deflate");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+
+            return client;
         }
 
         // Настраиваем периодический таймер, запускающий проверку каждые 10 минут
@@ -1080,6 +1104,32 @@ namespace CheckPosition
             DetermineHostingForSites(selectedSiteIds);
         }
 
+        private async void determineCpaMenuItem_Click(object sender, EventArgs e)
+        {
+            // Запускаем определение CPA для всех сайтов
+            await DetermineCpaForSitesAsync(null);
+        }
+
+        private async void determineCpaContextMenuItem_Click(object sender, EventArgs e)
+        {
+            // Получаем набор идентификаторов выделенных строк и запускаем выборочное определение CPA
+            var selectedSiteIds = new HashSet<long>();
+            foreach (DataGridViewRow row in dg.SelectedRows)
+            {
+                if (row.IsNewRow) continue;
+                long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+                if (siteId > 0) selectedSiteIds.Add(siteId);
+            }
+
+            if (selectedSiteIds.Count == 0)
+            {
+                MessageBox.Show("Выберите строку для определения CPA.", "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            await DetermineCpaForSitesAsync(selectedSiteIds);
+        }
+
         private void DetermineHostingForSites(IReadOnlyCollection<long> targetSiteIds)
         {
             // Выполняем определение хостинга с подготовкой данных и обновлением интерфейса
@@ -1174,6 +1224,152 @@ namespace CheckPosition
             finally
             {
                 Cursor.Current = previousCursor;
+            }
+        }
+
+        private async Task DetermineCpaForSitesAsync(IReadOnlyCollection<long> targetSiteIds)
+        {
+            // Выполняем определение CPA сетей на основе содержимого целевых страниц
+            Cursor previousCursor = Cursor.Current;
+            Cursor.Current = Cursors.WaitCursor;
+
+            try
+            {
+                var cpaRecords = database.LoadCpaList();
+                var cpaScripts = cpaRecords
+                    .Where(record => !string.IsNullOrWhiteSpace(record.Script))
+                    .Select(record => new { record.Id, Script = record.Script.Trim(), Name = record.Name ?? string.Empty })
+                    .Where(record => !string.IsNullOrEmpty(record.Script))
+                    .ToList();
+
+                if (cpaScripts.Count == 0)
+                {
+                    MessageBox.Show("В справочнике CPA отсутствуют записи со скриптами.", "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var siteRecords = database.LoadSitesForCpaDetection(targetSiteIds);
+                if (siteRecords.Count == 0)
+                {
+                    MessageBox.Show("Не найдено сайтов для обработки.", "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var updates = new Dictionary<long, long>();
+                var cpaNamesById = cpaRecords.ToDictionary(record => record.Id, record => record.Name ?? string.Empty);
+
+                foreach (var site in siteRecords)
+                {
+                    string normalizedUrl = NormalizeSiteUrl(site.PageAddress);
+                    if (string.IsNullOrEmpty(normalizedUrl)) continue;
+
+                    string pageContent = await DownloadPageContentAsync(normalizedUrl);
+                    if (string.IsNullOrEmpty(pageContent)) continue;
+
+                    foreach (var cpa in cpaScripts)
+                    {
+                        if (pageContent.IndexOf(cpa.Script, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            updates[site.Id] = cpa.Id;
+                            break;
+                        }
+                    }
+                }
+
+                if (updates.Count == 0)
+                {
+                    string message = targetSiteIds == null ? "Не удалось обнаружить CPA скрипты на страницах." : "Для выбранных записей CPA не определен.";
+                    MessageBox.Show(message, "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                database.UpdateSiteCpaBulk(updates);
+
+                if (targetSiteIds == null)
+                {
+                    database.getTableData(this.dg, "sites");
+                    colorize();
+                }
+                else
+                {
+                    ApplyCpaUpdatesToGrid(updates, cpaNamesById);
+                }
+
+                MessageBox.Show($"Определено CPA: {updates.Count}.", "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при определении CPA: {ex.Message}", "Определение CPA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor.Current = previousCursor;
+            }
+        }
+
+        private static string NormalizeSiteUrl(string pageAddress)
+        {
+            // Нормализуем адрес страницы перед загрузкой содержимого
+            if (string.IsNullOrWhiteSpace(pageAddress)) return string.Empty;
+
+            string trimmed = pageAddress.Trim();
+            string[] candidates = trimmed.Contains("://", StringComparison.Ordinal)
+                ? new[] { trimmed }
+                : new[] { "https://" + trimmed, "http://" + trimmed };
+
+            foreach (string candidate in candidates)
+            {
+                if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host))
+                {
+                    return uri.ToString();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static async Task<string> DownloadPageContentAsync(string url)
+        {
+            // Загружаем содержимое страницы с учетом ошибок сети
+            if (string.IsNullOrEmpty(url)) return string.Empty;
+
+            try
+            {
+                using (var response = await cpaHttpClient.GetAsync(url).ConfigureAwait(false))
+                {
+                    if (!response.IsSuccessStatusCode) return string.Empty;
+                    string content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    return content ?? string.Empty;
+                }
+            }
+            catch (HttpRequestException)
+            {
+                return string.Empty;
+            }
+            catch (TaskCanceledException)
+            {
+                return string.Empty;
+            }
+        }
+
+        private void ApplyCpaUpdatesToGrid(IReadOnlyDictionary<long, long> updates, IReadOnlyDictionary<long, string> cpaNamesById)
+        {
+            // Применяем найденные CPA сети к строкам таблицы без полной перезагрузки
+            if (updates == null || updates.Count == 0) return;
+
+            foreach (DataGridViewRow row in dg.Rows)
+            {
+                if (row.IsNewRow) continue;
+                long siteId = getIngValue(row.Cells[colID.Index].Value, -1);
+                if (!updates.TryGetValue(siteId, out long cpaId)) continue;
+
+                row.Cells[colCpaId.Index].Value = cpaId > 0 ? cpaId.ToString() : string.Empty;
+                string cpaName = string.Empty;
+                if (cpaId > 0 && cpaNamesById != null)
+                {
+                    cpaNamesById.TryGetValue(cpaId, out cpaName);
+                }
+                row.Cells[colCpaName.Index].Value = cpaName ?? string.Empty;
             }
         }
 

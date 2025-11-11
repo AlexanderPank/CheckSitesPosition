@@ -34,6 +34,7 @@
             this.contextMenuTreeView = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.checkRow = new System.Windows.Forms.ToolStripMenuItem();
             this.determineHostingContextMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.determineCpaContextMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showHistoryMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
@@ -51,6 +52,8 @@
             this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCpaId = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCpaName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colHostingId = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colHostingName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.statusStrip = new System.Windows.Forms.StatusStrip();
@@ -74,6 +77,7 @@
             this.mContinue = new System.Windows.Forms.ToolStripMenuItem();
             this.mStop = new System.Windows.Forms.ToolStripMenuItem();
             this.determineHostingMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.determineCpaMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripSeparator();
             this.bGetSiteList = new System.Windows.Forms.ToolStripMenuItem();
             this.правкиToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -92,12 +96,13 @@
             this.contextMenuTreeView.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.checkRow,
             this.determineHostingContextMenuItem,
+            this.determineCpaContextMenuItem,
             this.showHistoryMenuItem,
             this.toolStripMenuItem2,
             this.rowUp,
             this.rowDown});
             this.contextMenuTreeView.Name = "contextMenuTreeView";
-            this.contextMenuTreeView.Size = new System.Drawing.Size(242, 120);
+            this.contextMenuTreeView.Size = new System.Drawing.Size(242, 142);
             // 
             // checkRow
             // 
@@ -113,7 +118,15 @@
             this.determineHostingContextMenuItem.Size = new System.Drawing.Size(241, 22);
             this.determineHostingContextMenuItem.Text = "Определить хостинг";
             this.determineHostingContextMenuItem.Click += new System.EventHandler(this.determineHostingContextMenuItem_Click);
-            // 
+            //
+            // determineCpaContextMenuItem
+            //
+            // Добавляем пункт контекстного меню для определения CPA
+            this.determineCpaContextMenuItem.Name = "determineCpaContextMenuItem";
+            this.determineCpaContextMenuItem.Size = new System.Drawing.Size(241, 22);
+            this.determineCpaContextMenuItem.Text = "Определить CPA";
+            this.determineCpaContextMenuItem.Click += new System.EventHandler(this.determineCpaContextMenuItem_Click);
+            //
             // showHistoryMenuItem
             // 
             this.showHistoryMenuItem.Name = "showHistoryMenuItem";
@@ -172,6 +185,8 @@
             this.colFoundPageUrl,
             this.colAction,
             this.colStatus,
+            this.colCpaId,
+            this.colCpaName,
             this.colHostingId,
             this.colHostingName});
             this.dg.ContextMenuStrip = this.contextMenuTreeView;
@@ -256,13 +271,30 @@
             this.colAction.Name = "colAction";
             // 
             // colStatus
-            // 
+            //
             this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.colStatus.HeaderText = "Статус";
             this.colStatus.Name = "colStatus";
-            // 
+            //
+            // colCpaId
+            //
+            // Добавляем скрытый столбец для хранения идентификатора CPA
+            this.colCpaId.HeaderText = "CpaId";
+            this.colCpaId.Name = "colCpaId";
+            this.colCpaId.ReadOnly = true;
+            this.colCpaId.Visible = false;
+            //
+            // colCpaName
+            //
+            // Добавляем столбец для отображения названия CPA сети
+            this.colCpaName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.colCpaName.HeaderText = "CPA";
+            this.colCpaName.Name = "colCpaName";
+            this.colCpaName.ReadOnly = true;
+            this.colCpaName.Width = 160;
+            //
             // colHostingId
-            // 
+            //
             this.colHostingId.HeaderText = "HostingId";
             this.colHostingId.Name = "colHostingId";
             this.colHostingId.ReadOnly = true;
@@ -415,6 +447,7 @@
             this.mContinue,
             this.mStop,
             this.determineHostingMenuItem,
+            this.determineCpaMenuItem,
             this.toolStripMenuItem3,
             this.bGetSiteList});
             this.сканироватьToolStripMenuItem.Name = "сканироватьToolStripMenuItem";
@@ -450,7 +483,15 @@
             this.determineHostingMenuItem.Size = new System.Drawing.Size(296, 22);
             this.determineHostingMenuItem.Text = "Определить хостинг";
             this.determineHostingMenuItem.Click += new System.EventHandler(this.determineHostingMenuItem_Click);
-            // 
+            //
+            // determineCpaMenuItem
+            //
+            // Добавляем пункт меню для запуска определения CPA по всем сайтам
+            this.determineCpaMenuItem.Name = "determineCpaMenuItem";
+            this.determineCpaMenuItem.Size = new System.Drawing.Size(296, 22);
+            this.determineCpaMenuItem.Text = "Определить CPA";
+            this.determineCpaMenuItem.Click += new System.EventHandler(this.determineCpaMenuItem_Click);
+            //
             // toolStripMenuItem3
             // 
             this.toolStripMenuItem3.Name = "toolStripMenuItem3";
@@ -532,6 +573,7 @@
         private System.Windows.Forms.OpenFileDialog od;
         private System.Windows.Forms.ToolStripMenuItem checkRow;
         private System.Windows.Forms.ToolStripMenuItem determineHostingContextMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem determineCpaContextMenuItem;
         // Элемент контекстного меню для открытия истории позиций
         private System.Windows.Forms.ToolStripMenuItem showHistoryMenuItem;
         private System.Windows.Forms.StatusStrip statusStrip;
@@ -550,6 +592,7 @@
         private System.Windows.Forms.ToolStripMenuItem правкиToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem bSearch;
         private System.Windows.Forms.ToolStripMenuItem determineHostingMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem determineCpaMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem3;
         private System.Windows.Forms.ToolStripMenuItem bGetSiteList;
         private System.Windows.Forms.DataGridViewTextBoxColumn colID;
@@ -563,6 +606,8 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colFoundPageUrl;
         private System.Windows.Forms.DataGridViewTextBoxColumn colAction;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colCpaId;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colCpaName;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingId;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
         private System.Windows.Forms.ToolStripMenuItem mContinue;

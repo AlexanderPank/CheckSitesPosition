@@ -146,10 +146,12 @@ namespace CheckPosition
                 string query;
                 if (string.Equals(tableName, "sites", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Формируем запрос, дополнительно подтягивающий идентификатор и название хостинга для каждой записи сайта
+                    // Формируем запрос с дополнительными сведениями о CPA и хостинге для таблицы сайтов
                     query = "SELECT s.id, s.date, s.page_address, s.query, s.position_current, s.position_middle_current, " +
                             "s.position_previous, s.position_midlle_previous, s.url_in_search, s.comment, s.status, " +
+                            "COALESCE(s.cpa_id, 0) AS cpa_id, IFNULL(c.name, '') AS cpa_name, " +
                             "COALESCE(s.hosting_id, 0) AS hosting_id, IFNULL(h.name, '') AS hosting_name FROM sites s " +
+                            "LEFT JOIN cpa_list c ON c.id = s.cpa_id " +
                             "LEFT JOIN hosting_list h ON h.id = s.hosting_id ORDER BY s.id;";
                 }
                 else
@@ -256,6 +258,49 @@ namespace CheckPosition
             return result;
         }
 
+        // Загружаем список сайтов для определения CPA-скриптов
+        public List<SiteCpaCandidate> LoadSitesForCpaDetection(IReadOnlyCollection<long> siteIds)
+        {
+            var result = new List<SiteCpaCandidate>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    if (siteIds != null && siteIds.Count > 0)
+                    {
+                        // Формируем параметризованный список идентификаторов сайтов для выборки по CPA
+                        int index = 0;
+                        var placeholders = new List<string>();
+                        foreach (var siteId in siteIds)
+                        {
+                            string parameterName = "$cpaId" + index++;
+                            placeholders.Add(parameterName);
+                            command.Parameters.AddWithValue(parameterName, siteId);
+                        }
+                        string inClause = string.Join(",", placeholders);
+                        command.CommandText = $"SELECT id, page_address, COALESCE(cpa_id, 0) FROM sites WHERE id IN ({inClause}) ORDER BY id;";
+                    }
+                    else
+                    {
+                        command.CommandText = "SELECT id, page_address, COALESCE(cpa_id, 0) FROM sites ORDER BY id;";
+                    }
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string pageAddress = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            long cpaId = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
+                            result.Add(new SiteCpaCandidate(id, pageAddress, cpaId));
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
         // Обновляем хостинг для множества сайтов в рамках одной транзакции
         public void UpdateSiteHostingBulk(IReadOnlyDictionary<long, long> updates)
         {
@@ -280,6 +325,38 @@ namespace CheckPosition
                     {
                         idParameter.Value = update.Key;
                         hostingParameter.Value = update.Value;
+                        command.ExecuteNonQuery();
+                    }
+
+                    transaction.Commit();
+                }
+            }
+        }
+
+        // Обновляем CPA для набора сайтов атомарно
+        public void UpdateSiteCpaBulk(IReadOnlyDictionary<long, long> updates)
+        {
+            if (updates == null || updates.Count == 0) return;
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var transaction = _connection.BeginTransaction())
+                using (var command = _connection.CreateCommand())
+                {
+                    command.Transaction = transaction;
+                    command.CommandText = "UPDATE sites SET cpa_id = $cpaId WHERE id = $id;";
+                    var idParameter = command.CreateParameter();
+                    idParameter.ParameterName = "$id";
+                    command.Parameters.Add(idParameter);
+                    var cpaParameter = command.CreateParameter();
+                    cpaParameter.ParameterName = "$cpaId";
+                    command.Parameters.Add(cpaParameter);
+
+                    foreach (var update in updates)
+                    {
+                        idParameter.Value = update.Key;
+                        cpaParameter.Value = update.Value;
                         command.ExecuteNonQuery();
                     }
 
@@ -605,6 +682,21 @@ namespace CheckPosition
         public long Id { get; }
         public string PageAddress { get; }
         public long CurrentHostingId { get; }
+    }
+
+    // Добавляем структуру-обертку для сайтов при определении CPA
+    public sealed class SiteCpaCandidate
+    {
+        public SiteCpaCandidate(long id, string pageAddress, long currentCpaId)
+        {
+            Id = id;
+            PageAddress = pageAddress ?? string.Empty;
+            CurrentCpaId = currentCpaId;
+        }
+
+        public long Id { get; }
+        public string PageAddress { get; }
+        public long CurrentCpaId { get; }
     }
 
     // Добавляем структуру-обертку для записей cpa_list
