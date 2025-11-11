@@ -34,8 +34,8 @@
             this.contextMenuTreeView = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.checkRow = new System.Windows.Forms.ToolStripMenuItem();
             this.determineHostingContextMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.showHistoryMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem2 = new System.Windows.Forms.ToolStripSeparator();
             this.rowUp = new System.Windows.Forms.ToolStripMenuItem();
             this.rowDown = new System.Windows.Forms.ToolStripMenuItem();
             this.panel2 = new System.Windows.Forms.Panel();
@@ -61,6 +61,7 @@
             this.showDomainListForm = new System.Windows.Forms.ToolStripMenuItem();
             this.showHostingListMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showCpaListMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripSeparator();
             this.bYandexMetrica = new System.Windows.Forms.ToolStripMenuItem();
             this.загрузитьКоличествоСделокИзTravelToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.загрузитьКоличестовСделокИзAdmintadToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -77,10 +78,8 @@
             this.bGetSiteList = new System.Windows.Forms.ToolStripMenuItem();
             this.правкиToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.bSearch = new System.Windows.Forms.ToolStripMenuItem();
-            this.splitter1 = new System.Windows.Forms.Splitter();
             this.sd = new System.Windows.Forms.SaveFileDialog();
             this.od = new System.Windows.Forms.OpenFileDialog();
-            this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripSeparator();
             this.contextMenuTreeView.SuspendLayout();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).BeginInit();
@@ -90,7 +89,6 @@
             // 
             // contextMenuTreeView
             // 
-            // Регистрируем пункты контекстного меню списка проверок
             this.contextMenuTreeView.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.checkRow,
             this.determineHostingContextMenuItem,
@@ -108,22 +106,19 @@
             this.checkRow.Size = new System.Drawing.Size(241, 22);
             this.checkRow.Text = "Проверить позиции страницы";
             this.checkRow.Click += new System.EventHandler(this.checkRow_Click);
-            //
+            // 
             // determineHostingContextMenuItem
-            //
-            // Добавляем пункт контекстного меню для определения хостинга выбранной строки
+            // 
             this.determineHostingContextMenuItem.Name = "determineHostingContextMenuItem";
             this.determineHostingContextMenuItem.Size = new System.Drawing.Size(241, 22);
             this.determineHostingContextMenuItem.Text = "Определить хостинг";
             this.determineHostingContextMenuItem.Click += new System.EventHandler(this.determineHostingContextMenuItem_Click);
-            //
+            // 
             // showHistoryMenuItem
-            //
-            // Добавляем пункт контекстного меню для просмотра истории позиций
+            // 
             this.showHistoryMenuItem.Name = "showHistoryMenuItem";
             this.showHistoryMenuItem.Size = new System.Drawing.Size(241, 22);
             this.showHistoryMenuItem.Text = "Показать историю";
-            // Привязываем обработчик для открытия формы с графиком истории
             this.showHistoryMenuItem.Click += new System.EventHandler(this.showHistoryMenuItem_Click);
             // 
             // toolStripMenuItem2
@@ -149,12 +144,14 @@
             // 
             // panel2
             // 
+            this.panel2.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.panel2.Controls.Add(this.dg);
-            this.panel2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel2.Location = new System.Drawing.Point(0, 24);
             this.panel2.Name = "panel2";
             this.panel2.Padding = new System.Windows.Forms.Padding(3, 0, 0, 0);
-            this.panel2.Size = new System.Drawing.Size(1430, 523);
+            this.panel2.Size = new System.Drawing.Size(1635, 718);
             this.panel2.TabIndex = 1;
             // 
             // dg
@@ -180,10 +177,11 @@
             this.dg.ContextMenuStrip = this.contextMenuTreeView;
             this.dg.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dg.Location = new System.Drawing.Point(3, 0);
+            this.dg.Margin = new System.Windows.Forms.Padding(3, 3, 3, 123);
             this.dg.Name = "dg";
             this.dg.RowHeadersVisible = false;
             this.dg.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dg.Size = new System.Drawing.Size(1427, 523);
+            this.dg.Size = new System.Drawing.Size(1632, 718);
             this.dg.TabIndex = 0;
             this.dg.CellBeginEdit += new System.Windows.Forms.DataGridViewCellCancelEventHandler(this.dg_CellBeginEdit);
             this.dg.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dg_CellDoubleClick);
@@ -262,33 +260,31 @@
             this.colStatus.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.colStatus.HeaderText = "Статус";
             this.colStatus.Name = "colStatus";
-            //
+            // 
             // colHostingId
-            //
-            // Добавляем скрытый столбец для хранения идентификатора хостинга
+            // 
             this.colHostingId.HeaderText = "HostingId";
             this.colHostingId.Name = "colHostingId";
             this.colHostingId.ReadOnly = true;
             this.colHostingId.Visible = false;
-            //
+            // 
             // colHostingName
-            //
-            // Добавляем столбец для отображения наименования хостинга
+            // 
             this.colHostingName.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.colHostingName.HeaderText = "Хостинг";
             this.colHostingName.Name = "colHostingName";
             this.colHostingName.ReadOnly = true;
             this.colHostingName.Width = 160;
-            //
+            // 
             // statusStrip
-            //
+            // 
             this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.statusLabel,
             this.statusProgressBar});
-            this.statusStrip.Location = new System.Drawing.Point(3, 525);
+            this.statusStrip.Location = new System.Drawing.Point(0, 745);
             this.statusStrip.Name = "statusStrip";
             this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
-            this.statusStrip.Size = new System.Drawing.Size(1427, 22);
+            this.statusStrip.Size = new System.Drawing.Size(1635, 22);
             this.statusStrip.SizingGrip = false;
             this.statusStrip.TabIndex = 4;
             this.statusStrip.Text = "statusStrip";
@@ -317,7 +313,7 @@
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
             this.menuStrip1.Padding = new System.Windows.Forms.Padding(8, 2, 0, 2);
-            this.menuStrip1.Size = new System.Drawing.Size(1430, 24);
+            this.menuStrip1.Size = new System.Drawing.Size(1635, 24);
             this.menuStrip1.TabIndex = 2;
             this.menuStrip1.Text = "menuStrip1";
             // 
@@ -357,6 +353,11 @@
             this.showCpaListMenuItem.Size = new System.Drawing.Size(324, 22);
             this.showCpaListMenuItem.Text = "Партнерки";
             this.showCpaListMenuItem.Click += new System.EventHandler(this.showCpaListMenuItem_Click);
+            // 
+            // toolStripMenuItem4
+            // 
+            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(321, 6);
             // 
             // bYandexMetrica
             // 
@@ -442,10 +443,9 @@
             this.mStop.Size = new System.Drawing.Size(296, 22);
             this.mStop.Text = "Остановить проверку";
             this.mStop.Click += new System.EventHandler(this.mStop_Click);
-            //
+            // 
             // determineHostingMenuItem
-            //
-            // Добавляем пункт меню запуска массового определения хостинга
+            // 
             this.determineHostingMenuItem.Name = "determineHostingMenuItem";
             this.determineHostingMenuItem.Size = new System.Drawing.Size(296, 22);
             this.determineHostingMenuItem.Text = "Определить хостинг";
@@ -479,14 +479,6 @@
             this.bSearch.Text = "Поиск";
             this.bSearch.Click += new System.EventHandler(this.bSearch_Click);
             // 
-            // splitter1
-            // 
-            this.splitter1.Location = new System.Drawing.Point(0, 24);
-            this.splitter1.Name = "splitter1";
-            this.splitter1.Size = new System.Drawing.Size(3, 523);
-            this.splitter1.TabIndex = 3;
-            this.splitter1.TabStop = false;
-            // 
             // sd
             // 
             this.sd.Filter = "Check Position Project|*.chps|All Files|*.*";
@@ -495,18 +487,12 @@
             // 
             this.od.Filter = "Check Position Project|*.chps|All Files|*.*";
             // 
-            // toolStripMenuItem4
-            // 
-            this.toolStripMenuItem4.Name = "toolStripMenuItem4";
-            this.toolStripMenuItem4.Size = new System.Drawing.Size(321, 6);
-            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 14F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1430, 547);
+            this.ClientSize = new System.Drawing.Size(1635, 767);
             this.Controls.Add(this.statusStrip);
-            this.Controls.Add(this.splitter1);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.menuStrip1);
             this.Font = new System.Drawing.Font("Verdana", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(204)));
@@ -542,7 +528,6 @@
         private System.Windows.Forms.ToolStripMenuItem сканироватьToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem mStart;
         private System.Windows.Forms.ToolStripMenuItem mStop;
-        private System.Windows.Forms.Splitter splitter1;
         private System.Windows.Forms.SaveFileDialog sd;
         private System.Windows.Forms.OpenFileDialog od;
         private System.Windows.Forms.ToolStripMenuItem checkRow;
