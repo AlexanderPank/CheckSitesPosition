@@ -45,7 +45,8 @@ namespace CheckPosition
             chartArea.AxisY.MajorGrid.LineColor = Color.LightGray;
             chartArea.AxisY.Title = "Позиция";
             chartArea.AxisX.Title = "Дата";
-            chartArea.AxisY.IsReversed = true;
+            chartArea.AxisY.IsReversed = false; // Переводим ось Y в классическую систему координат с началом отсчета снизу
+            chartArea.AxisY.LabelStyle.Format = "0"; // Принудительно задаем целочисленный формат подписей оси Y
             chartArea.AxisX.Crossing = double.NaN;
             // Размещаем легенду сверху для экономии вертикального места
             historyChart.Legends[0].Docking = Docking.Top;
@@ -141,7 +142,7 @@ namespace CheckPosition
 
             if (yValuesBuffer.Count > 0)
             {
-                // Фиксируем границы оси Y, чтобы разместить подписи дат у нижней границы графика
+                // Рассчитываем целевые границы по оси Y и приводим их к удобному шагу отображения
                 var minValue = yValuesBuffer.Min();
                 var maxValue = yValuesBuffer.Max();
                 if (Math.Abs(maxValue - minValue) < double.Epsilon)
@@ -149,16 +150,87 @@ namespace CheckPosition
                     maxValue = minValue + 1;
                 }
 
-                chartArea.AxisY.Minimum = minValue;
-                chartArea.AxisY.Maximum = maxValue;
-                chartArea.AxisX.Crossing = maxValue;
+                ApplyVerticalAxisLayout(chartArea, minValue, maxValue);
             }
             else
             {
                 chartArea.AxisY.Minimum = double.NaN;
                 chartArea.AxisY.Maximum = double.NaN;
                 chartArea.AxisX.Crossing = double.NaN;
+                chartArea.AxisY.CustomLabels.Clear(); // Сбрасываем пользовательские подписи при отсутствии данных
             }
+        }
+
+        private static void ApplyVerticalAxisLayout(ChartArea chartArea, double minValue, double maxValue)
+        {
+            // Настраиваем ось Y так, чтобы график начинался в левом нижнем углу и имел целочисленные подписи
+            var axisY = chartArea.AxisY;
+            var lowerBound = minValue < 0 ? Math.Floor(minValue) : 0d; // Корректируем нижнюю границу, чтобы отрицательные значения оставались видимыми
+            var upperBound = DetermineAxisUpperBound(maxValue); // Подбираем верхнюю границу с округлением до десятков
+
+            axisY.Minimum = lowerBound; // Фиксируем нижнюю границу оси Y
+            axisY.Maximum = upperBound; // Фиксируем верхнюю границу оси Y
+            axisY.Interval = 1d; // Обеспечиваем дискретность шкалы в один пункт для всех отметок
+            axisY.MajorTickMark.Interval = 1d; // Сохраняем метки оси на каждом целочисленном значении
+            axisY.MajorGrid.Interval = 5d; // Выводим вспомогательные линии каждые пять позиций для лучшей читаемости
+            axisY.MajorGrid.IntervalOffset = 0d; // Обнуляем смещение сетки, чтобы отметки совпадали с целыми значениями
+            axisY.CustomLabels.Clear(); // Удаляем ранее добавленные пользовательские подписи
+
+            foreach (var value in BuildAxisLabels(lowerBound, upperBound))
+            {
+                axisY.CustomLabels.Add(new CustomLabel(value - 0.5, value + 0.5, value.ToString("0"), 0, LabelMarkStyle.None)); // Формируем подписи ровно для нужных значений
+            }
+
+            chartArea.AxisX.Crossing = lowerBound; // Перемещаем ось X к нижней границе для отображения дат снизу
+            axisY.Crossing = double.NaN; // Сохраняем ось Y на левой границе области построения
+        }
+
+        private static IReadOnlyList<double> BuildAxisLabels(double lowerBound, double upperBound)
+        {
+            // Готовим набор целочисленных отметок, соответствующих требованиям заказчика
+            var labels = new SortedSet<double>();
+            var normalizedLower = Math.Ceiling(lowerBound);
+            if (normalizedLower > upperBound)
+            {
+                normalizedLower = upperBound;
+            }
+
+            for (var value = normalizedLower; value <= upperBound; value += 1d)
+            {
+                labels.Add(value); // Добавляем все целые значения в диапазоне для поддержки отрицательных диапазонов
+            }
+
+            if (upperBound >= 1d)
+            {
+                labels.Add(1d); // Явно фиксируем отметку "1" как ключевую для поисковых позиций
+            }
+
+            if (upperBound >= 5d)
+            {
+                labels.Add(5d); // Добавляем отметку "5" согласно требуемому набору значений
+            }
+
+            for (var value = 0d; value <= upperBound; value += 10d)
+            {
+                labels.Add(value); // Дополняем шкалу отметками каждые десять позиций
+            }
+
+            return labels
+                .Where(value => value >= lowerBound && value <= upperBound)
+                .OrderBy(value => value)
+                .ToArray(); // Сортируем и возвращаем итоговый набор отметок в виде неизменяемой коллекции
+        }
+
+        private static double DetermineAxisUpperBound(double maxValue)
+        {
+            // Округляем верхнюю границу шкалы до ближайшего десятка, сохраняя минимум в районе пятерки для компактных наборов данных
+            if (maxValue <= 5d)
+            {
+                return 5d;
+            }
+
+            var rounded = Math.Ceiling(maxValue / 10d) * 10d; // Поднимаем верхнюю границу до ближайших десяти
+            return Math.Max(rounded, 10d); // Гарантируем, что шкала не станет слишком узкой
         }
 
         private void InitializeSeriesFilters()
