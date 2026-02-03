@@ -13,11 +13,12 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using PsiMetricsNet48;
+using WordStatisticParserClient;
+using System.Net.Security;
 
 namespace CheckPosition
 {
-    
-
     public partial class Form1 : Form
     {
  
@@ -47,11 +48,18 @@ namespace CheckPosition
         private const string StatusCheckingText = "идет проверка доменов";
         private static readonly TimeSpan[] domainCheckRetryDelays = new[] // График повторов проверки доменов с нарастающими задержками
         {
-            TimeSpan.Zero,
             TimeSpan.FromMinutes(1),
-            TimeSpan.FromMinutes(2),
             TimeSpan.FromMinutes(3),
-            TimeSpan.FromMinutes(4),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(5),
             TimeSpan.FromMinutes(5)
         };
         // Определяем разделители IP-адресов для поиска в списке хостингов
@@ -166,6 +174,33 @@ namespace CheckPosition
             AddToStartup();
           //  test();
             InitializePeriodicCheckTimer();
+
+            //var apiKey = Environment.GetEnvironmentVariable("PSI_API_KEY") ?? "AIzaSyCwiCkltlDMBBzNlW5R_mKnfROT8LBPWoI";
+            //var client = new PageSpeedInsightsClient(apiKey);
+            //var url = "https://hotel-olginka.ru";
+
+            //var m = client.GetMetricsAsync(url, Strategy.Mobile, locale: "ru").GetAwaiter().GetResult();
+            //Console.WriteLine("Performance score: " + m.PerformanceScore);
+            //Console.WriteLine("LCP ms: " + m.LargestContentfulPaintMs);
+            //Console.WriteLine("CLS: " + m.CumulativeLayoutShift);
+            //Console.WriteLine("Requests: " + m.NetworkRequestsCount);
+            //Console.WriteLine("Total bytes: " + m.TotalByteWeight);
+            ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
+
+            var client = new WordParserClient("https://txtxt.ru/lemmatizer/api/v1/text/parse_by_url");
+
+            var url = "https://agat123.ru/";
+            var keyword = "Гостевой дом Агат Кабардинка";
+
+            // синхронный вызов без async/await:
+            var m = client.ParseAsync(url, keyword, includeRawJson: false)
+                          .GetAwaiter()
+                          .GetResult();
+
+            Console.WriteLine("TotalWords: " + m.TotalWords);
+            Console.WriteLine("H1: " + m.H1Count);
+            Console.WriteLine("KW in title: " + m.KeywordWordsInTitle);
+            Console.WriteLine("Flesch: " + m.FleschReadingEase);
         }
 
         // Создаем и настраиваем HTTP-клиент для скачивания страниц при определении CPA
@@ -857,7 +892,10 @@ namespace CheckPosition
             var indexes = new List<int>();
             foreach (DataGridViewRow row in dg.SelectedRows)
             {
-                if (row == null || row.IsNewRow || !ShouldCheckRowAutomatically(row.Index)) continue;
+                if (row == null || row.IsNewRow || !ShouldCheckRowAutomatically(row.Index))
+                {
+                  if (sender != checkRow)  continue;
+                }
                 indexes.Add(row.Index);
             }
 
