@@ -39,10 +39,11 @@ namespace CheckPosition
             if (this._connection.State == System.Data.ConnectionState.Open)
                try { this._connection.Close(); } catch { }
         }
-        public int appendSite(string date, string pageAddress, string Query, int positionCurrent, int positionPrevious, string urlInSearch, string comment, string status) {
+        // Добавляем новый сайт с начальными данными о позиции и конкуренте
+        public int appendSite(string date, string pageAddress, string Query, int positionCurrent, int positionPrevious, string urlInSearch, string competitor, string comment, string status) {
      
-            string query = $"INSERT INTO sites (date, page_address, query, position_current, position_previous, url_in_search, comment, status) VALUES ";
-                   query += $"('{date}', '{pageAddress}', '{Query}', {positionCurrent}, {positionPrevious}, '{urlInSearch}', '{comment}', '{status}')";
+            string query = $"INSERT INTO sites (date, page_address, query, position_current, position_previous, url_in_search, competitor, comment, status) VALUES ";
+                   query += $"('{date}', '{pageAddress}', '{Query}', {positionCurrent}, {positionPrevious}, '{urlInSearch}', '{competitor}', '{comment}', '{status}')";
             execSQL(query);
 
             string resutl = execSQL(@"select last_insert_rowid()");
@@ -126,10 +127,11 @@ namespace CheckPosition
 
             return history;
         }
-        public void updateSite(int id, string date, string pageAddress, string Query, int positionCurrent, int positionMiddleCurrent, int positionPrevious, int positionMiddlePrevious, string urlInSearch, string comment, string status)
+        // Обновляем данные сайта, включая информацию о конкурентах
+        public void updateSite(int id, string date, string pageAddress, string Query, int positionCurrent, int positionMiddleCurrent, int positionPrevious, int positionMiddlePrevious, string urlInSearch, string competitor, string comment, string status)
         {
             string query = $"UPDATE sites SET date='{date}', page_address='{pageAddress}', query='{Query}', position_current={positionCurrent}, position_middle_current={positionMiddleCurrent}, " +
-                           $"position_previous={positionPrevious}, position_midlle_previous={positionMiddlePrevious}, url_in_search='{urlInSearch}', comment='{comment}', status='{status}' " +
+                           $"position_previous={positionPrevious}, position_midlle_previous={positionMiddlePrevious}, url_in_search='{urlInSearch}', competitor='{competitor}', comment='{comment}', status='{status}' " +
                            $"WHERE id={id}";
             execSQL(query);
         }
@@ -148,7 +150,7 @@ namespace CheckPosition
                 {
                     // Формируем запрос с дополнительными сведениями о CPA и хостинге для таблицы сайтов
                     query = "SELECT s.id, s.date, s.page_address, s.query, s.position_current, s.position_middle_current, " +
-                            "s.position_previous, s.position_midlle_previous, s.url_in_search, s.comment, s.status, " +
+                            "s.position_previous, s.position_midlle_previous, s.url_in_search, s.competitor, s.comment, s.status, " +
                             "COALESCE(s.cpa_id, 0) AS cpa_id, IFNULL(c.name, '') AS cpa_name, " +
                             "COALESCE(s.hosting_id, 0) AS hosting_id, IFNULL(h.name, '') AS hosting_name FROM sites s " +
                             "LEFT JOIN cpa_list c ON c.id = s.cpa_id " +
