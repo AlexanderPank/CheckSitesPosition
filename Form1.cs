@@ -16,6 +16,7 @@ using System.Windows.Forms;
 using PsiMetricsNet48;
 using WordStatisticParserClient;
 using System.Net.Security;
+using TechnicalSeoCheckerNet48;
 
 namespace CheckPosition
 {
@@ -42,6 +43,7 @@ namespace CheckPosition
         // Добавляем формы справочников для управления хостингами и CPA сетями
         private HostingList hostingListForm;
         private CpaList cpaListForm;
+        private TechnicalSeoChecker checker;
         // Храним интервалы периодического обновления и срок устаревания записей
         private static readonly TimeSpan periodicCheckInterval = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan staleCheckThreshold = TimeSpan.FromDays(7);
@@ -172,7 +174,9 @@ namespace CheckPosition
                     break;
                 }
             AddToStartup();
-          //  test();
+            //  test();
+            checker = new TechnicalSeoChecker();
+
             InitializePeriodicCheckTimer();
 
             //var apiKey = Environment.GetEnvironmentVariable("PSI_API_KEY") ?? "AIzaSyCwiCkltlDMBBzNlW5R_mKnfROT8LBPWoI";
@@ -187,20 +191,21 @@ namespace CheckPosition
             //Console.WriteLine("Total bytes: " + m.TotalByteWeight);
             ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
 
-            var client = new WordParserClient("https://txtxt.ru/lemmatizer/api/v1/text/parse_by_url");
+            //var client = new WordParserClient("https://txtxt.ru/lemmatizer/api/v1/text/parse_by_url");
 
-            var url = "https://agat123.ru/";
-            var keyword = "Гостевой дом Агат Кабардинка";
+            //var url = "https://agat123.ru/";
+            //var keyword = "Гостевой дом Агат Кабардинка";
 
-            // синхронный вызов без async/await:
-            var m = client.ParseAsync(url, keyword, includeRawJson: false)
-                          .GetAwaiter()
-                          .GetResult();
+            //// синхронный вызов без async/await:
+            //var m = client.ParseAsync(url, keyword, includeRawJson: false)
+            //              .GetAwaiter()
+            //              .GetResult();
 
-            Console.WriteLine("TotalWords: " + m.TotalWords);
-            Console.WriteLine("H1: " + m.H1Count);
-            Console.WriteLine("KW in title: " + m.KeywordWordsInTitle);
-            Console.WriteLine("Flesch: " + m.FleschReadingEase);
+            //Console.WriteLine("TotalWords: " + m.TotalWords);
+            //Console.WriteLine("H1: " + m.H1Count);
+            //Console.WriteLine("KW in title: " + m.KeywordWordsInTitle);
+            //Console.WriteLine("Flesch: " + m.FleschReadingEase);
+ 
         }
 
         // Создаем и настраиваем HTTP-клиент для скачивания страниц при определении CPA
@@ -454,7 +459,7 @@ namespace CheckPosition
             string foundPageUrl = string.Empty;
             string competitors = string.Empty;
 
-            for (int attempt = 0; attempt < 4; attempt++)
+            for (int attempt = 0; attempt < 3; attempt++)
             {
                 token.ThrowIfCancellationRequested();
 
@@ -780,8 +785,7 @@ namespace CheckPosition
                 if (string.IsNullOrWhiteSpace(candidateDomain)) continue;
                 if (!string.IsNullOrWhiteSpace(ownDomain) && string.Equals(candidateDomain, ownDomain, StringComparison.OrdinalIgnoreCase)) continue;
 
-                string normalized = NormalizeMainPageUrl(uri);
-                if (!string.IsNullOrWhiteSpace(normalized) && seen.Add(normalized)) competitors.Add(normalized);
+                competitors.Add(candidateDomain);
             }
 
             return string.Join(",", competitors);
@@ -802,19 +806,33 @@ namespace CheckPosition
             return Uri.TryCreate(url.Trim(), UriKind.Absolute, out uri);
         }
 
-        // Проверяем, что URL указывает на главную страницу без параметров
-        private bool IsMainPage(Uri uri)
+
+        private  bool IsMainPage(Uri uri)
         {
             if (uri == null) return false;
-            if (!string.IsNullOrWhiteSpace(uri.Query) || !string.IsNullOrWhiteSpace(uri.Fragment)) return false;
 
-            string path = uri.AbsolutePath ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(path) || path == "/") return true;
+            // без параметров и якоря
+            if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+                return false;
 
-            string fileName = Path.GetFileName(path);
-            if (string.IsNullOrWhiteSpace(fileName)) return true;
+            var path = uri.AbsolutePath ?? string.Empty;
 
-            return fileName.StartsWith("index.", StringComparison.OrdinalIgnoreCase);
+            // домен или /
+            if (string.IsNullOrEmpty(path) || path == "/")
+                return true;
+
+            // нормализуем хвост: /index.html -> index.html, / -> ""
+            var fileName = Path.GetFileName(path.TrimEnd('/'));
+            if (string.IsNullOrEmpty(fileName))
+                return true; // путь заканчивается на /
+
+            // index.* (любой регистр)
+            // index, index.html, index.php, index.aspx, index.htm и т.д.
+            var name = Path.GetFileNameWithoutExtension(fileName);
+            if (!string.IsNullOrEmpty(name) && name.Equals("index", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return false;
         }
 
         // Нормализуем URL главной страницы в компактный вид для сохранения в базе
@@ -1927,6 +1945,16 @@ namespace CheckPosition
                 else
                     row.Cells[colHostingName.Index].Value = string.Empty;
             }
+        }
+
+        private void tecknicalCheck_Click(object sender, EventArgs e)
+        {
+            if (dg.SelectedRows.Count == 0) return; 
+            var url = dg.SelectedRows[0].Cells[colPageUrl.Index].Value.ToString();
+            var report = checker.Check(url);
+            Clipboard.SetText(report);
+            MessageBox.Show(report, "Инфа", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            
         }
     }
 }
