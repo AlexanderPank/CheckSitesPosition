@@ -42,6 +42,7 @@ CREATE TABLE "sites" (
 	"position_previous"	INTEGER,
 	"position_midlle_previous"	INTEGER DEFAULT 0,
 	"url_in_search"	TEXT,
+	"competitor"	TEXT,
 	"comment"	TEXT,
 	"status"	TEXT,
 	"row_position"	INTEGER DEFAULT 0,

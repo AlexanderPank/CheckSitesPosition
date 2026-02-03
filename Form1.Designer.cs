@@ -78,6 +78,7 @@
             this.colLastPosition = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colMidPrev = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colFoundPageUrl = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCompetitor = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colAction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colCpaId = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -182,6 +183,7 @@
             this.colLastPosition,
             this.colMidPrev,
             this.colFoundPageUrl,
+            this.colCompetitor,
             this.colAction,
             this.colStatus,
             this.colCpaId,
@@ -483,6 +485,11 @@
             this.colFoundPageUrl.HeaderText = "URL в поиске";
             this.colFoundPageUrl.Name = "colFoundPageUrl";
             // 
+            // colCompetitor
+            // 
+            this.colCompetitor.HeaderText = "Конкурент";
+            this.colCompetitor.Name = "colCompetitor";
+            // 
             // colAction
             // 
             this.colAction.HeaderText = "Действия";
@@ -600,6 +607,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colLastPosition;
         private System.Windows.Forms.DataGridViewTextBoxColumn colMidPrev;
         private System.Windows.Forms.DataGridViewTextBoxColumn colFoundPageUrl;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colCompetitor;
         private System.Windows.Forms.DataGridViewTextBoxColumn colAction;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStatus;
         private System.Windows.Forms.DataGridViewTextBoxColumn colCpaId;
@@ -608,4 +616,3 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
     }
 }
-

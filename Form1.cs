@@ -263,6 +263,7 @@ namespace CheckPosition
             public int Position { get; set; }
             public int AveragePosition { get; set; }
             public string FoundPageUrl { get; set; }
+            public string Competitors { get; set; }
             public DateTime CheckDate { get; set; }
         }
 
@@ -445,21 +446,24 @@ namespace CheckPosition
         }
 
         // Выполняем запросы к XML API и высчитываем позицию домена
+        // Выполняем проверку позиции и собираем информацию по конкурентам
         private DomainCheckResult ExecuteDomainCheck(DomainCheckRequest request, CancellationToken token)
         {
             var attempts = new List<int>();
             int bestPosition = int.MaxValue;
             string foundPageUrl = string.Empty;
+            string competitors = string.Empty;
 
             for (int attempt = 0; attempt < 4; attempt++)
             {
                 token.ThrowIfCancellationRequested();
 
-                int position = getPosition(request.Keyword, request.Url, out var foundUrl, "2", token);
+                int position = getPosition(request.Keyword, request.Url, out var foundUrl, out var competitorList, "2", token);
                 if (position < 0) throw new InvalidOperationException("Ошибка получения позиции домена");
                 bestPosition = Math.Min(bestPosition, position);
                 attempts.Add(position);
                 foundPageUrl = foundUrl;
+                competitors = competitorList;
                 Task.Delay(TimeSpan.FromSeconds(1), token).Wait(token);
             }
 
@@ -472,6 +476,7 @@ namespace CheckPosition
                 Position = bestPosition,
                 AveragePosition = averagePosition,
                 FoundPageUrl = foundPageUrl,
+                Competitors = competitors,
                 CheckDate = DateTime.Now
             };
         }
@@ -503,6 +508,7 @@ namespace CheckPosition
             row.Cells[colLastPosition.Index].Value = prevPosition;
             row.Cells[colMidPrev.Index].Value = prevMidPosition;
             row.Cells[colFoundPageUrl.Index].Value = result.FoundPageUrl;
+            row.Cells[colCompetitor.Index].Value = result.Competitors;
             row.Cells[colDateCheck.Index].Value = result.CheckDate.ToString("dd.MM.yy");
 
             saveRow(index);
@@ -691,10 +697,12 @@ namespace CheckPosition
         }
 
      
-        private int getPosition(String keyword, String findUrl, out String url, String Region = "2", CancellationToken token = default)
+        // Определяем позицию домена и список конкурентов по выдаче
+        private int getPosition(String keyword, String findUrl, out String url, out String competitors, String Region = "2", CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
             url = "";
+            competitors = string.Empty;
             String urlXML = Properties.Settings.Default.XMLURL;
             //urlXML += "&query=" + keyword + "&lr=" + Region + "&lr=2&l10n=ru&sortby=rlv&filter=none&maxpassages=1&groupby=attr%3Dd.mode%3Ddeep.groups-on-page%3D100.docs-in-group%3D1&page=0";
             urlXML += keyword;
@@ -740,6 +748,7 @@ namespace CheckPosition
             }
 
             List<string> urls = listUrl(text);
+            competitors = BuildCompetitorList(urls, findUrl);
             int pos = FindUrl(urls, findUrl);
             if (pos > 0) url = "OK";
             else
@@ -749,6 +758,72 @@ namespace CheckPosition
             }
 
             return pos;
+        }
+
+        // Формируем список конкурентов из первых 10 результатов, ограничиваясь главными страницами других доменов
+        private string BuildCompetitorList(IReadOnlyList<string> urls, string ownUrl)
+        {
+            if (urls == null || urls.Count == 0) return string.Empty;
+
+            string ownDomain = TryGetDomain(ownUrl);
+            var competitors = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int limit = Math.Min(10, urls.Count);
+
+            for (int i = 0; i < limit; i++)
+            {
+                string candidate = urls[i];
+                if (!TryCreateUri(candidate, out var uri)) continue;
+                if (!IsMainPage(uri)) continue;
+
+                string candidateDomain = uri.Host;
+                if (string.IsNullOrWhiteSpace(candidateDomain)) continue;
+                if (!string.IsNullOrWhiteSpace(ownDomain) && string.Equals(candidateDomain, ownDomain, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string normalized = NormalizeMainPageUrl(uri);
+                if (!string.IsNullOrWhiteSpace(normalized) && seen.Add(normalized)) competitors.Add(normalized);
+            }
+
+            return string.Join(",", competitors);
+        }
+
+        // Пытаемся получить домен из входного URL, возвращаем пустую строку при ошибке
+        private string TryGetDomain(string url)
+        {
+            if (!TryCreateUri(url, out var uri)) return string.Empty;
+            return uri.Host ?? string.Empty;
+        }
+
+        // Безопасно создаем Uri, чтобы не падать на мусорных данных из выдачи
+        private bool TryCreateUri(string url, out Uri uri)
+        {
+            uri = null;
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            return Uri.TryCreate(url.Trim(), UriKind.Absolute, out uri);
+        }
+
+        // Проверяем, что URL указывает на главную страницу без параметров
+        private bool IsMainPage(Uri uri)
+        {
+            if (uri == null) return false;
+            if (!string.IsNullOrWhiteSpace(uri.Query) || !string.IsNullOrWhiteSpace(uri.Fragment)) return false;
+
+            string path = uri.AbsolutePath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(path) || path == "/") return true;
+
+            string fileName = Path.GetFileName(path);
+            if (string.IsNullOrWhiteSpace(fileName)) return true;
+
+            return fileName.StartsWith("index.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Нормализуем URL главной страницы в компактный вид для сохранения в базе
+        private string NormalizeMainPageUrl(Uri uri)
+        {
+            if (uri == null) return string.Empty;
+            string baseUrl = uri.GetLeftPart(UriPartial.Authority);
+            if (string.IsNullOrWhiteSpace(baseUrl)) return string.Empty;
+            return baseUrl.TrimEnd('/') + "/";
         }
 
         private int FindUrl(List<string> lStr, String url, bool isStrong = true)
@@ -807,6 +882,7 @@ namespace CheckPosition
             int middle_prev_pos = getIngValue(row.Cells[colMidPrev.Index].Value, 0);  
             
             string foundPageUrl = getStringValue(row.Cells[colFoundPageUrl.Index].Value);
+            string competitors   = getStringValue(row.Cells[colCompetitor.Index].Value);
             string url          = getStringValue(row.Cells[colPageUrl.Index].Value);
             string keyword      = getStringValue(row.Cells[colKeyword.Index].Value);
             string dateNow      = getStringValue(row.Cells[colDateCheck.Index].Value);
@@ -817,10 +893,10 @@ namespace CheckPosition
             long effectiveSiteId = id;
 
             if (id != -1)
-                this.database.updateSite(id, dateNow, url, keyword, position, middle_position,  prev_pos, middle_prev_pos, foundPageUrl, coment, status);
+                this.database.updateSite(id, dateNow, url, keyword, position, middle_position, prev_pos, middle_prev_pos, foundPageUrl, competitors, coment, status);
             else
             {
-               long id_row =  this.database.appendSite(dateNow, url, keyword, position, prev_pos, foundPageUrl, coment, status);
+               long id_row =  this.database.appendSite(dateNow, url, keyword, position, prev_pos, foundPageUrl, competitors, coment, status);
                 if (id_row >= 0)
                 {
                     row.Cells[colID.Index].Value = id_row;
