@@ -43,6 +43,8 @@ namespace CheckPosition
         // Добавляем формы справочников для управления хостингами и CPA сетями
         private HostingList hostingListForm;
         private CpaList cpaListForm;
+        // Форма аналитики для результатов парсеров
+        private AnalysisDataForm analysisDataForm;
         private TechnicalSeoChecker checker;
         // Храним интервалы периодического обновления и срок устаревания записей
         private static readonly TimeSpan periodicCheckInterval = TimeSpan.FromMinutes(10);
@@ -1136,6 +1138,20 @@ namespace CheckPosition
             cpaListForm.WindowState = FormWindowState.Normal;
             cpaListForm.BringToFront();
             cpaListForm.Activate();
+        }
+
+        private void analysisDataMenuItem_Click(object sender, EventArgs e)
+        {
+            // Открываем форму анализа данных и активируем ее поверх других окон
+            if (analysisDataForm == null || analysisDataForm.IsDisposed)
+            {
+                analysisDataForm = new AnalysisDataForm(database);
+            }
+
+            analysisDataForm.Show(this);
+            analysisDataForm.WindowState = FormWindowState.Normal;
+            analysisDataForm.BringToFront();
+            analysisDataForm.Activate();
         }
 
         private void bYandexMetrica_Click(object sender, EventArgs e)
