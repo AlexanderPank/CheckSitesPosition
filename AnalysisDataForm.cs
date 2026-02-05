@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,17 +15,22 @@ namespace CheckPosition
     {
         private const int SearchMinLength = 4;
         private const int ParserTimeoutSeconds = 90;
+        private const string HiddenColumnsFileName = "analysis_hidden_columns.txt";
 
         private readonly DataBaseSqlite _database;
         private DataTable _analysisTable;
         private CancellationTokenSource _analysisCts;
         private bool _isRunning;
+        private readonly HashSet<string> _hiddenColumns;
+        private bool _isUpdatingColumnVisibility;
 
         public AnalysisDataForm(DataBaseSqlite database)
         {
             InitializeComponent();
             // Сохраняем ссылку на базу данных и настраиваем таблицу
             _database = database ?? throw new ArgumentNullException(nameof(database));
+            // Загружаем сохраненные настройки скрытых столбцов, чтобы восстановить вид таблицы
+            _hiddenColumns = LoadHiddenColumns();
             analysisGrid.AutoGenerateColumns = true;
             analysisGrid.DataBindingComplete += AnalysisGrid_DataBindingComplete;
             analysisGrid.SelectionChanged += AnalysisGrid_SelectionChanged;
@@ -145,18 +151,11 @@ namespace CheckPosition
             {
                 column.SortMode = DataGridViewColumnSortMode.Automatic;
             }
-
-            if (analysisGrid.Columns.Contains("site_id"))
-            {
-                analysisGrid.Columns["site_id"].Visible = false;
-            }
-
-            if (analysisGrid.Columns.Contains("raw_json"))
-            {
-                analysisGrid.Columns["raw_json"].Visible = false;
-            }
-
+            // Применяем заголовки и порядок столбцов перед восстановлением видимости
             ApplyColumnHeaders();
+            ApplyColumnOrder();
+            ApplySavedColumnVisibility();
+            BuildColumnVisibilityControls();
         }
 
         private void ApplyColumnHeaders()
@@ -166,9 +165,9 @@ namespace CheckPosition
             {
                 ["id"] = "ID",
                 ["site_id"] = "ID сайта",
-                ["page_address"] = "Адрес сайта",
-                ["check_date"] = "Дата проверки",
                 ["page_url"] = "URL страницы",
+                ["position_current"] = "позиция",
+                ["check_date"] = "Дата проверки",
                 ["strategy"] = "Стратегия",
                 ["fetch_time"] = "Время Lighthouse",
                 ["psi_perf_score"] = "Производительность",
@@ -228,6 +227,183 @@ namespace CheckPosition
                     column.HeaderText = headerText;
                 }
             }
+        }
+
+        private void ApplyColumnOrder()
+        {
+            // Проставляем порядок ключевых столбцов, чтобы пользователю было проще ориентироваться
+            var order = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["id"] = 0,
+                ["site_id"] = 1,
+                ["page_url"] = 2,
+                ["position_current"] = 3,
+                ["check_date"] = 4
+            };
+
+            foreach (DataGridViewColumn column in analysisGrid.Columns)
+            {
+                if (order.TryGetValue(column.Name, out int index))
+                {
+                    column.DisplayIndex = index;
+                }
+            }
+        }
+
+        private void ApplySavedColumnVisibility()
+        {
+            // Восстанавливаем видимость столбцов из сохраненного списка и применяем дефолты при первом запуске
+            EnsureDefaultHiddenColumns();
+            foreach (DataGridViewColumn column in analysisGrid.Columns)
+            {
+                column.Visible = !_hiddenColumns.Contains(column.Name);
+            }
+        }
+
+        private void EnsureDefaultHiddenColumns()
+        {
+            // Добавляем дефолтные скрытые столбцы, если пользователь еще не настраивал видимость
+            if (_hiddenColumns.Count > 0)
+            {
+                return;
+            }
+
+            _hiddenColumns.Add("site_id");
+            _hiddenColumns.Add("raw_json");
+        }
+
+        private void BuildColumnVisibilityControls()
+        {
+            // Пересоздаем список чекбоксов только после загрузки колонок, чтобы он отражал текущее состояние
+            if (columnsPanel == null || analysisGrid.Columns.Count == 0)
+            {
+                return;
+            }
+
+            _isUpdatingColumnVisibility = true;
+            columnsPanel.SuspendLayout();
+            try
+            {
+                columnsPanel.Controls.Clear();
+                foreach (DataGridViewColumn column in analysisGrid.Columns)
+                {
+                    var checkBox = new CheckBox
+                    {
+                        AutoSize = true,
+                        Text = column.HeaderText,
+                        Checked = column.Visible,
+                        Tag = column.Name
+                    };
+                    checkBox.CheckedChanged += ColumnVisibility_CheckedChanged;
+                    columnsPanel.Controls.Add(checkBox);
+                }
+            }
+            finally
+            {
+                columnsPanel.ResumeLayout();
+                _isUpdatingColumnVisibility = false;
+            }
+        }
+
+        private void ColumnVisibility_CheckedChanged(object sender, EventArgs e)
+        {
+            // Применяем выбор пользователя и сохраняем список скрытых колонок в профиле
+            if (_isUpdatingColumnVisibility)
+            {
+                return;
+            }
+
+            if (!(sender is CheckBox checkBox))
+            {
+                return;
+            }
+
+            string columnName = Convert.ToString(checkBox.Tag);
+            if (string.IsNullOrWhiteSpace(columnName) || !analysisGrid.Columns.Contains(columnName))
+            {
+                return;
+            }
+
+            analysisGrid.Columns[columnName].Visible = checkBox.Checked;
+            UpdateHiddenColumnsState(columnName, !checkBox.Checked);
+        }
+
+        private void UpdateHiddenColumnsState(string columnName, bool isHidden)
+        {
+            // Обновляем внутренний список и сохраняем его на диск, чтобы настройка переживала закрытие формы
+            if (isHidden)
+            {
+                _hiddenColumns.Add(columnName);
+            }
+            else
+            {
+                _hiddenColumns.Remove(columnName);
+            }
+
+            SaveHiddenColumns();
+        }
+
+        private HashSet<string> LoadHiddenColumns()
+        {
+            // Читаем сохраненные настройки из файла профиля, чтобы не зависеть от системных настроек проекта
+            var hiddenColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                string filePath = GetHiddenColumnsFilePath();
+                if (!File.Exists(filePath))
+                {
+                    return hiddenColumns;
+                }
+
+                foreach (string line in File.ReadAllLines(filePath))
+                {
+                    string trimmed = line?.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed))
+                    {
+                        hiddenColumns.Add(trimmed);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка загрузки настроек столбцов: " + ex.Message);
+            }
+
+            return hiddenColumns;
+        }
+
+        private void SaveHiddenColumns()
+        {
+            // Сохраняем список скрытых колонок атомарно, чтобы избежать повреждения настроек
+            try
+            {
+                string filePath = GetHiddenColumnsFilePath();
+                string folderPath = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrWhiteSpace(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                string tempPath = filePath + ".tmp";
+                File.WriteAllLines(tempPath, _hiddenColumns.OrderBy(name => name));
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+
+                File.Move(tempPath, filePath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка сохранения настроек столбцов: " + ex.Message);
+            }
+        }
+
+        private string GetHiddenColumnsFilePath()
+        {
+            // Формируем путь к файлу в профиле пользователя, чтобы настройки не зависели от каталога приложения
+            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            return Path.Combine(appDataPath, "CheckPosition", HiddenColumnsFileName);
         }
 
         private static bool IsPlaceholderValue(object value)
@@ -302,13 +478,13 @@ namespace CheckPosition
 
         private int FindRowIndex(string query, int startIndex, int endIndex)
         {
-            // Пробегаем по диапазону строк и сравниваем page_address без учета регистра
+            // Пробегаем по диапазону строк и сравниваем page_url без учета регистра
             if (startIndex < 0 || endIndex < 0 || startIndex > endIndex)
             {
                 return -1;
             }
 
-            if (!analysisGrid.Columns.Contains("page_address"))
+            if (!analysisGrid.Columns.Contains("page_url"))
             {
                 return -1;
             }
@@ -316,7 +492,7 @@ namespace CheckPosition
             for (int i = startIndex; i <= endIndex; i++)
             {
                 DataGridViewRow row = analysisGrid.Rows[i];
-                string value = Convert.ToString(row.Cells["page_address"].Value) ?? string.Empty;
+                string value = Convert.ToString(row.Cells["page_url"].Value) ?? string.Empty;
                 if (value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return i;
