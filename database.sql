@@ -72,7 +72,7 @@ CREATE TABLE "cpa_list" (
 
 CREATE TABLE "site_analysis_data" (
 	"id"	INTEGER,
-	"site_id1"	INTEGER NOT NULL,
+	"site_id"	INTEGER NOT NULL,
 	"check_date"	TEXT NOT NULL,
 	"page_url"	TEXT,
 	"strategy"	TEXT,

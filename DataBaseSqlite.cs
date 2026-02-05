@@ -454,7 +454,7 @@ namespace CheckPosition
                     command.CommandText =
                         "CREATE TABLE IF NOT EXISTS site_analysis_data (" +
                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                        "site_id1 INTEGER NOT NULL, " +
+                        "site_id INTEGER NOT NULL, " +
                         "check_date TEXT NOT NULL, " +
                         "page_url TEXT, " +
                         "strategy TEXT, " +
@@ -514,7 +514,7 @@ namespace CheckPosition
 
                 using (var indexCommand = _connection.CreateCommand())
                 {
-                    indexCommand.CommandText = "CREATE INDEX IF NOT EXISTS idx_site_analysis_site_id1 ON site_analysis_data(site_id1);";
+                    indexCommand.CommandText = "CREATE INDEX IF NOT EXISTS idx_site_analysis_site_id ON site_analysis_data(site_id);";
                     indexCommand.ExecuteNonQuery();
                 }
             }
@@ -573,7 +573,7 @@ namespace CheckPosition
                 using (var command = _connection.CreateCommand())
                 {
                     command.CommandText =
-                        "SELECT a.id, a.site_id1, s.page_address, a.check_date, a.page_url, a.strategy, a.fetch_time, " +
+                        "SELECT a.id, a.site_id, s.page_address, a.check_date, a.page_url, a.strategy, a.fetch_time, " +
                         "a.psi_perf_score, a.psi_seo_score, a.psi_bp_score, a.psi_a11y_score, a.psi_lcp_ms, a.psi_cls, " +
                         "a.psi_inp_ms, a.psi_tbt_ms, a.psi_ttfb_ms, a.psi_fcp_ms, a.psi_si_ms, a.psi_bytes, a.psi_req_cnt, " +
                         "a.psi_unused_js_b, a.psi_unused_css_b, a.psi_offscr_img_b, a.psi_modern_img_b, a.psi_opt_img_b, " +
@@ -584,7 +584,7 @@ namespace CheckPosition
                         "a.word_kw_words_in_headers, a.word_kw_words_in_alt, a.word_kw_words_in_text, a.word_tokens_ratio, a.word_kincaid_score, " +
                         "a.word_flesch_reading_ease, a.word_gunning_fog, a.word_smog_index, a.word_ari, a.word_main_keyword_density, a.raw_json " +
                         "FROM site_analysis_data a " +
-                        "LEFT JOIN sites s ON s.id = a.site_id1 " +
+                        "LEFT JOIN sites s ON s.id = a.site_id " +
                         "ORDER BY a.id DESC;";
                     using (var reader = command.ExecuteReader())
                     {
@@ -610,9 +610,9 @@ namespace CheckPosition
 
             // Готовим значения для безопасной вставки с учетом возможных null в метриках
             object DbValue(string value) => string.IsNullOrWhiteSpace(value) ? (object)DBNull.Value : value;
-            object DbValue(double? value) => value.HasValue ? (object)value.Value : DBNull.Value;
-            object DbValue(int? value) => value.HasValue ? (object)value.Value : DBNull.Value;
-            object DbValue(DateTimeOffset? value) => value.HasValue ? (object)value.Value.ToString("O") : DBNull.Value;
+            object DbValueDouble(double? value) => value.HasValue ? (object)value.Value : DBNull.Value;
+            object DbValueInt(int? value) => value.HasValue ? (object)value.Value : DBNull.Value;
+            object DbValueDate(DateTimeOffset? value) => value.HasValue ? (object)value.Value.ToString("O") : DBNull.Value;
 
             lock (_dbSync)
             {
@@ -624,7 +624,7 @@ namespace CheckPosition
                         command.Transaction = transaction;
                         command.CommandText =
                             "INSERT INTO site_analysis_data (" +
-                            "site_id1, check_date, page_url, strategy, fetch_time, " +
+                            "site_id, check_date, page_url, strategy, fetch_time, " +
                             "psi_perf_score, psi_seo_score, psi_bp_score, psi_a11y_score, psi_lcp_ms, psi_cls, psi_inp_ms, psi_tbt_ms, " +
                             "psi_ttfb_ms, psi_fcp_ms, psi_si_ms, psi_bytes, psi_req_cnt, psi_unused_js_b, psi_unused_css_b, " +
                             "psi_offscr_img_b, psi_modern_img_b, psi_opt_img_b, " +
@@ -651,58 +651,58 @@ namespace CheckPosition
                         command.Parameters.AddWithValue("$checkDate", checkDate.ToString("O"));
                         command.Parameters.AddWithValue("$pageUrl", DbValue(pageUrl));
                         command.Parameters.AddWithValue("$strategy", DbValue(psiMetrics.Strategy.ToString()));
-                        command.Parameters.AddWithValue("$fetchTime", DbValue(psiMetrics.FetchTime));
-                        command.Parameters.AddWithValue("$psiPerfScore", DbValue(psiMetrics.PerformanceScore));
-                        command.Parameters.AddWithValue("$psiSeoScore", DbValue(psiMetrics.SeoScore));
-                        command.Parameters.AddWithValue("$psiBpScore", DbValue(psiMetrics.BestPracticesScore));
-                        command.Parameters.AddWithValue("$psiA11yScore", DbValue(psiMetrics.AccessibilityScore));
-                        command.Parameters.AddWithValue("$psiLcpMs", DbValue(psiMetrics.LargestContentfulPaintMs));
-                        command.Parameters.AddWithValue("$psiCls", DbValue(psiMetrics.CumulativeLayoutShift));
-                        command.Parameters.AddWithValue("$psiInpMs", DbValue(psiMetrics.InteractionToNextPaintMs));
-                        command.Parameters.AddWithValue("$psiTbtMs", DbValue(psiMetrics.TotalBlockingTimeMs));
-                        command.Parameters.AddWithValue("$psiTtfbMs", DbValue(psiMetrics.ServerResponseTimeMs));
-                        command.Parameters.AddWithValue("$psiFcpMs", DbValue(psiMetrics.FirstContentfulPaintMs));
-                        command.Parameters.AddWithValue("$psiSiMs", DbValue(psiMetrics.SpeedIndexMs));
-                        command.Parameters.AddWithValue("$psiBytes", DbValue(psiMetrics.TotalByteWeight));
-                        command.Parameters.AddWithValue("$psiReqCnt", DbValue(psiMetrics.NetworkRequestsCount));
-                        command.Parameters.AddWithValue("$psiUnusedJsB", DbValue(psiMetrics.UnusedJavaScriptSavingsBytes));
-                        command.Parameters.AddWithValue("$psiUnusedCssB", DbValue(psiMetrics.UnusedCssSavingsBytes));
-                        command.Parameters.AddWithValue("$psiOffscrImgB", DbValue(psiMetrics.OffscreenImagesSavingsBytes));
-                        command.Parameters.AddWithValue("$psiModernImgB", DbValue(psiMetrics.ModernImageFormatsSavingsBytes));
-                        command.Parameters.AddWithValue("$psiOptImgB", DbValue(psiMetrics.UsesOptimizedImagesSavingsBytes));
+                        command.Parameters.AddWithValue("$fetchTime", DbValueDate(psiMetrics.FetchTime));
+                        command.Parameters.AddWithValue("$psiPerfScore", DbValueDouble(psiMetrics.PerformanceScore));
+                        command.Parameters.AddWithValue("$psiSeoScore", DbValueDouble(psiMetrics.SeoScore));
+                        command.Parameters.AddWithValue("$psiBpScore", DbValueDouble(psiMetrics.BestPracticesScore));
+                        command.Parameters.AddWithValue("$psiA11yScore", DbValueDouble(psiMetrics.AccessibilityScore));
+                        command.Parameters.AddWithValue("$psiLcpMs", DbValueDouble(psiMetrics.LargestContentfulPaintMs));
+                        command.Parameters.AddWithValue("$psiCls", DbValueDouble(psiMetrics.CumulativeLayoutShift));
+                        command.Parameters.AddWithValue("$psiInpMs", DbValueDouble(psiMetrics.InteractionToNextPaintMs));
+                        command.Parameters.AddWithValue("$psiTbtMs", DbValueDouble(psiMetrics.TotalBlockingTimeMs));
+                        command.Parameters.AddWithValue("$psiTtfbMs", DbValueDouble(psiMetrics.ServerResponseTimeMs));
+                        command.Parameters.AddWithValue("$psiFcpMs", DbValueDouble(psiMetrics.FirstContentfulPaintMs));
+                        command.Parameters.AddWithValue("$psiSiMs", DbValueDouble(psiMetrics.SpeedIndexMs));
+                        command.Parameters.AddWithValue("$psiBytes", DbValueDouble(psiMetrics.TotalByteWeight));
+                        command.Parameters.AddWithValue("$psiReqCnt", DbValueInt(psiMetrics.NetworkRequestsCount));
+                        command.Parameters.AddWithValue("$psiUnusedJsB", DbValueDouble(psiMetrics.UnusedJavaScriptSavingsBytes));
+                        command.Parameters.AddWithValue("$psiUnusedCssB", DbValueDouble(psiMetrics.UnusedCssSavingsBytes));
+                        command.Parameters.AddWithValue("$psiOffscrImgB", DbValueDouble(psiMetrics.OffscreenImagesSavingsBytes));
+                        command.Parameters.AddWithValue("$psiModernImgB", DbValueDouble(psiMetrics.ModernImageFormatsSavingsBytes));
+                        command.Parameters.AddWithValue("$psiOptImgB", DbValueDouble(psiMetrics.UsesOptimizedImagesSavingsBytes));
 
                         // Используем ключевую фразу из метрик, а при отсутствии берем исходный запрос сайта
                         string effectiveKeyword = !string.IsNullOrWhiteSpace(wordMetrics?.Keyword) ? wordMetrics.Keyword : keyword;
                         command.Parameters.AddWithValue("$wordKeyword", DbValue(effectiveKeyword));
-                        command.Parameters.AddWithValue("$wordTotalWords", DbValue(wordMetrics?.TotalWords));
-                        command.Parameters.AddWithValue("$wordTotalSentences", DbValue(wordMetrics?.TotalSentences));
-                        command.Parameters.AddWithValue("$wordTotalParagraphs", DbValue(wordMetrics?.TotalParagraphs));
-                        command.Parameters.AddWithValue("$wordTotalWordsInParagraphs", DbValue(wordMetrics?.TotalWordsInParagraphs));
-                        command.Parameters.AddWithValue("$wordH1Count", DbValue(wordMetrics?.H1Count));
-                        command.Parameters.AddWithValue("$wordH2Count", DbValue(wordMetrics?.H2Count));
-                        command.Parameters.AddWithValue("$wordH3Count", DbValue(wordMetrics?.H3Count));
-                        command.Parameters.AddWithValue("$wordH4Count", DbValue(wordMetrics?.H4Count));
-                        command.Parameters.AddWithValue("$wordH5Count", DbValue(wordMetrics?.H5Count));
-                        command.Parameters.AddWithValue("$wordTotalWordsInHeaders", DbValue(wordMetrics?.TotalWordsInHeaders));
-                        command.Parameters.AddWithValue("$wordTotalWordsInTitle", DbValue(wordMetrics?.TotalWordsInTitle));
-                        command.Parameters.AddWithValue("$wordTotalWordsInDescription", DbValue(wordMetrics?.TotalWordsInDescription));
-                        command.Parameters.AddWithValue("$wordImageCount", DbValue(wordMetrics?.ImageCount));
-                        command.Parameters.AddWithValue("$wordInnerLinks", DbValue(wordMetrics?.InnerLinks));
-                        command.Parameters.AddWithValue("$wordOuterLinks", DbValue(wordMetrics?.OuterLinks));
-                        command.Parameters.AddWithValue("$wordTotalWordsInLinks", DbValue(wordMetrics?.TotalWordsInLinks));
-                        command.Parameters.AddWithValue("$wordKwWordsCount", DbValue(wordMetrics?.KeywordWordsCount));
-                        command.Parameters.AddWithValue("$wordKwWordsInTitle", DbValue(wordMetrics?.KeywordWordsInTitle));
-                        command.Parameters.AddWithValue("$wordKwWordsInDescription", DbValue(wordMetrics?.KeywordWordsInDescription));
-                        command.Parameters.AddWithValue("$wordKwWordsInHeaders", DbValue(wordMetrics?.KeywordWordsInHeaders));
-                        command.Parameters.AddWithValue("$wordKwWordsInAlt", DbValue(wordMetrics?.KeywordWordsInAlt));
-                        command.Parameters.AddWithValue("$wordKwWordsInText", DbValue(wordMetrics?.KeywordWordsInText));
-                        command.Parameters.AddWithValue("$wordTokensRatio", DbValue(wordMetrics?.TokensRatio));
-                        command.Parameters.AddWithValue("$wordKincaidScore", DbValue(wordMetrics?.KincaidScore));
-                        command.Parameters.AddWithValue("$wordFleschReadingEase", DbValue(wordMetrics?.FleschReadingEase));
-                        command.Parameters.AddWithValue("$wordGunningFog", DbValue(wordMetrics?.GunningFog));
-                        command.Parameters.AddWithValue("$wordSmogIndex", DbValue(wordMetrics?.SmogIndex));
-                        command.Parameters.AddWithValue("$wordAri", DbValue(wordMetrics?.AutomatedReadabilityIndex));
-                        command.Parameters.AddWithValue("$wordMainKeywordDensity", DbValue(wordMetrics?.MainKeywordDensity));
+                        command.Parameters.AddWithValue("$wordTotalWords", DbValueInt(wordMetrics?.TotalWords));
+                        command.Parameters.AddWithValue("$wordTotalSentences", DbValueInt(wordMetrics?.TotalSentences));
+                        command.Parameters.AddWithValue("$wordTotalParagraphs", DbValueInt(wordMetrics?.TotalParagraphs));
+                        command.Parameters.AddWithValue("$wordTotalWordsInParagraphs", DbValueInt(wordMetrics?.TotalWordsInParagraphs));
+                        command.Parameters.AddWithValue("$wordH1Count", DbValueInt(wordMetrics?.H1Count));
+                        command.Parameters.AddWithValue("$wordH2Count", DbValueInt(wordMetrics?.H2Count));
+                        command.Parameters.AddWithValue("$wordH3Count", DbValueInt(wordMetrics?.H3Count));
+                        command.Parameters.AddWithValue("$wordH4Count", DbValueInt(wordMetrics?.H4Count));
+                        command.Parameters.AddWithValue("$wordH5Count", DbValueInt(wordMetrics?.H5Count));
+                        command.Parameters.AddWithValue("$wordTotalWordsInHeaders", DbValueInt(wordMetrics?.TotalWordsInHeaders));
+                        command.Parameters.AddWithValue("$wordTotalWordsInTitle", DbValueInt(wordMetrics?.TotalWordsInTitle));
+                        command.Parameters.AddWithValue("$wordTotalWordsInDescription", DbValueInt(wordMetrics?.TotalWordsInDescription));
+                        command.Parameters.AddWithValue("$wordImageCount", DbValueInt(wordMetrics?.ImageCount));
+                        command.Parameters.AddWithValue("$wordInnerLinks", DbValueInt(wordMetrics?.InnerLinks));
+                        command.Parameters.AddWithValue("$wordOuterLinks", DbValueInt(wordMetrics?.OuterLinks));
+                        command.Parameters.AddWithValue("$wordTotalWordsInLinks", DbValueInt(wordMetrics?.TotalWordsInLinks));
+                        command.Parameters.AddWithValue("$wordKwWordsCount", DbValueInt(wordMetrics?.KeywordWordsCount));
+                        command.Parameters.AddWithValue("$wordKwWordsInTitle", DbValueInt(wordMetrics?.KeywordWordsInTitle));
+                        command.Parameters.AddWithValue("$wordKwWordsInDescription", DbValueInt(wordMetrics?.KeywordWordsInDescription));
+                        command.Parameters.AddWithValue("$wordKwWordsInHeaders", DbValueInt(wordMetrics?.KeywordWordsInHeaders));
+                        command.Parameters.AddWithValue("$wordKwWordsInAlt", DbValueInt(wordMetrics?.KeywordWordsInAlt));
+                        command.Parameters.AddWithValue("$wordKwWordsInText", DbValueInt(wordMetrics?.KeywordWordsInText));
+                        command.Parameters.AddWithValue("$wordTokensRatio", DbValueDouble(wordMetrics?.TokensRatio));
+                        command.Parameters.AddWithValue("$wordKincaidScore", DbValueDouble(wordMetrics?.KincaidScore));
+                        command.Parameters.AddWithValue("$wordFleschReadingEase", DbValueDouble(wordMetrics?.FleschReadingEase));
+                        command.Parameters.AddWithValue("$wordGunningFog", DbValueDouble(wordMetrics?.GunningFog));
+                        command.Parameters.AddWithValue("$wordSmogIndex", DbValueDouble(wordMetrics?.SmogIndex));
+                        command.Parameters.AddWithValue("$wordAri", DbValueDouble(wordMetrics?.AutomatedReadabilityIndex));
+                        command.Parameters.AddWithValue("$wordMainKeywordDensity", DbValueDouble(wordMetrics?.MainKeywordDensity));
                         command.Parameters.AddWithValue("$rawJson", DbValue(wordMetrics?.RawJson));
 
                         command.ExecuteNonQuery();

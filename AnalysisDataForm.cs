@@ -115,9 +115,9 @@ namespace CheckPosition
                 column.SortMode = DataGridViewColumnSortMode.Automatic;
             }
 
-            if (analysisGrid.Columns.Contains("site_id1"))
+            if (analysisGrid.Columns.Contains("site_id"))
             {
-                analysisGrid.Columns["site_id1"].Visible = false;
+                analysisGrid.Columns["site_id"].Visible = false;
             }
         }
 
@@ -129,12 +129,12 @@ namespace CheckPosition
                 return 0;
             }
 
-            if (!analysisGrid.Columns.Contains("site_id1"))
+            if (!analysisGrid.Columns.Contains("site_id"))
             {
                 return 0;
             }
 
-            object rawValue = analysisGrid.CurrentRow.Cells["site_id1"].Value;
+            object rawValue = analysisGrid.CurrentRow.Cells["site_id"].Value;
             return Helper.getIngValue(rawValue, 0);
         }
 
