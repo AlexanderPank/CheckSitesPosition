@@ -81,6 +81,7 @@
             this.determineCpaMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem3 = new System.Windows.Forms.ToolStripSeparator();
             this.bGetSiteList = new System.Windows.Forms.ToolStripMenuItem();
+            this.analysisDataMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.правкиToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.bSearch = new System.Windows.Forms.ToolStripMenuItem();
             this.sd = new System.Windows.Forms.SaveFileDialog();
@@ -347,6 +348,7 @@
             this.проектToolStripMenuItem,
             this.настройкиToolStripMenuItem,
             this.сканироватьToolStripMenuItem,
+            this.analysisDataMenuItem,
             this.правкиToolStripMenuItem});
             this.menuStrip1.Location = new System.Drawing.Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
@@ -509,6 +511,13 @@
             this.bGetSiteList.Text = "Список сайтов отсуствующих в таблице";
             this.bGetSiteList.Click += new System.EventHandler(this.bGetSiteList_Click);
             // 
+            // analysisDataMenuItem
+            // 
+            this.analysisDataMenuItem.Name = "analysisDataMenuItem";
+            this.analysisDataMenuItem.Size = new System.Drawing.Size(102, 20);
+            this.analysisDataMenuItem.Text = "Анализ данных";
+            this.analysisDataMenuItem.Click += new System.EventHandler(this.analysisDataMenuItem_Click);
+            // 
             // правкиToolStripMenuItem
             // 
             this.правкиToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -612,6 +621,7 @@
         private System.Windows.Forms.ToolStripMenuItem determineCpaMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem3;
         private System.Windows.Forms.ToolStripMenuItem bGetSiteList;
+        private System.Windows.Forms.ToolStripMenuItem analysisDataMenuItem;
         private System.Windows.Forms.ToolStripMenuItem mContinue;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem4;
         private System.Windows.Forms.DataGridViewTextBoxColumn colID;
