@@ -595,6 +595,53 @@ namespace CheckPosition
             return table;
         }
 
+        // Добавляем пустые записи аналитики для сайтов, которых нет в таблице site_analysis_data
+        public int InsertMissingAnalysisRecords()
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    using (var command = _connection.CreateCommand())
+                    {
+                        // Формируем массовую вставку с дефолтными значениями, чтобы избежать циклов и лишних запросов
+                        command.Transaction = transaction;
+                        command.CommandText =
+                            "INSERT INTO site_analysis_data (" +
+                            "site_id, check_date, page_url, strategy, fetch_time, " +
+                            "psi_perf_score, psi_seo_score, psi_bp_score, psi_a11y_score, psi_lcp_ms, psi_cls, psi_inp_ms, psi_tbt_ms, " +
+                            "psi_ttfb_ms, psi_fcp_ms, psi_si_ms, psi_bytes, psi_req_cnt, psi_unused_js_b, psi_unused_css_b, " +
+                            "psi_offscr_img_b, psi_modern_img_b, psi_opt_img_b, " +
+                            "word_keyword, word_total_words, word_total_sentences, word_total_paragraphs, word_total_words_in_paragraphs, " +
+                            "word_h1_count, word_h2_count, word_h3_count, word_h4_count, word_h5_count, word_total_words_in_headers, " +
+                            "word_total_words_in_title, word_total_words_in_description, word_image_count, word_inner_links, word_outer_links, " +
+                            "word_total_words_in_links, word_kw_words_count, word_kw_words_in_title, word_kw_words_in_description, " +
+                            "word_kw_words_in_headers, word_kw_words_in_alt, word_kw_words_in_text, word_tokens_ratio, word_kincaid_score, " +
+                            "word_flesch_reading_ease, word_gunning_fog, word_smog_index, word_ari, word_main_keyword_density, raw_json" +
+                            ") " +
+                            "SELECT s.id, $checkDate, s.page_address, '', '', " +
+                            "-1, -1, -1, -1, -1, -1, -1, -1, " +
+                            "-1, -1, -1, -1, -1, -1, -1, " +
+                            "-1, -1, -1, " +
+                            "'', -1, -1, -1, -1, " +
+                            "-1, -1, -1, -1, -1, -1, " +
+                            "-1, -1, -1, -1, -1, " +
+                            "-1, -1, -1, " +
+                            "-1, -1, -1, -1, -1, -1, " +
+                            "-1, -1, -1, -1, -1, -1, '' " +
+                            "FROM sites s " +
+                            "WHERE NOT EXISTS (SELECT 1 FROM site_analysis_data a WHERE a.site_id = s.id);";
+                        command.Parameters.AddWithValue("$checkDate", DateTimeOffset.Now.ToString("O"));
+
+                        int inserted = command.ExecuteNonQuery();
+                        transaction.Commit();
+                        return inserted;
+                    }
+                }
+            }
+        }
+
         // Добавляем запись аналитики по результатам парсеров и возвращаем идентификатор вставленной строки
         public long InsertSiteAnalysisRecord(long siteId, string pageUrl, string keyword, DateTimeOffset checkDate, PageSpeedMetrics psiMetrics, ParsedPageMetrics wordMetrics)
         {

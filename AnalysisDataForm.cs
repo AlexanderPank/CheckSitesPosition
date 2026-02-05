@@ -28,6 +28,7 @@ namespace CheckPosition
             analysisGrid.AutoGenerateColumns = true;
             analysisGrid.DataBindingComplete += AnalysisGrid_DataBindingComplete;
             analysisGrid.SelectionChanged += AnalysisGrid_SelectionChanged;
+            analysisGrid.CellFormatting += AnalysisGrid_CellFormatting;
         }
 
         private void AnalysisDataForm_Shown(object sender, EventArgs e)
@@ -46,6 +47,21 @@ namespace CheckPosition
         {
             // Обновляем состояние кнопки "Проверить выбранный" при смене строки
             checkSelectedButton.Enabled = analysisGrid.CurrentRow != null && !analysisGrid.CurrentRow.IsNewRow;
+        }
+
+        private void AnalysisGrid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            // Заменяем служебное значение -1 на пустое отображение, чтобы таблица была читаемой
+            if (e.Value == null)
+            {
+                return;
+            }
+
+            if (IsPlaceholderValue(e.Value))
+            {
+                e.Value = string.Empty;
+                e.FormattingApplied = true;
+            }
         }
 
         private void searchTextBox_TextChanged(object sender, EventArgs e)
@@ -79,6 +95,21 @@ namespace CheckPosition
 
             var targets = _database.LoadSitesForAnalysis(new[] { siteId });
             await RunAnalysisAsync(targets).ConfigureAwait(true);
+        }
+
+        private void addMissingButton_Click(object sender, EventArgs e)
+        {
+            // Добавляем пустые записи аналитики для сайтов, у которых еще нет данных
+            try
+            {
+                int addedCount = _database.InsertMissingAnalysisRecords();
+                LoadAnalysisData();
+                MessageBox.Show(addedCount > 0 ? $"Добавлено записей: {addedCount}." : "Новых записей не найдено.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка добавления записей: " + ex.Message);
+            }
         }
 
         private void stopButton_Click(object sender, EventArgs e)
@@ -119,6 +150,116 @@ namespace CheckPosition
             {
                 analysisGrid.Columns["site_id"].Visible = false;
             }
+
+            if (analysisGrid.Columns.Contains("raw_json"))
+            {
+                analysisGrid.Columns["raw_json"].Visible = false;
+            }
+
+            ApplyColumnHeaders();
+        }
+
+        private void ApplyColumnHeaders()
+        {
+            // Проставляем русские заголовки по смыслу метрик из комментариев парсеров
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["id"] = "ID",
+                ["site_id"] = "ID сайта",
+                ["page_address"] = "Адрес сайта",
+                ["check_date"] = "Дата проверки",
+                ["page_url"] = "URL страницы",
+                ["strategy"] = "Стратегия",
+                ["fetch_time"] = "Время Lighthouse",
+                ["psi_perf_score"] = "Производительность",
+                ["psi_seo_score"] = "SEO",
+                ["psi_bp_score"] = "Best Practices",
+                ["psi_a11y_score"] = "Доступность",
+                ["psi_lcp_ms"] = "LCP, мс",
+                ["psi_cls"] = "CLS",
+                ["psi_inp_ms"] = "INP, мс",
+                ["psi_tbt_ms"] = "TBT, мс",
+                ["psi_ttfb_ms"] = "TTFB, мс",
+                ["psi_fcp_ms"] = "FCP, мс",
+                ["psi_si_ms"] = "Speed Index, мс",
+                ["psi_bytes"] = "Вес, байт",
+                ["psi_req_cnt"] = "Запросы",
+                ["psi_unused_js_b"] = "Неисп. JS, байт",
+                ["psi_unused_css_b"] = "Неисп. CSS, байт",
+                ["psi_offscr_img_b"] = "Offscreen img, байт",
+                ["psi_modern_img_b"] = "Modern img, байт",
+                ["psi_opt_img_b"] = "Опт. img, байт",
+                ["word_keyword"] = "Ключевая фраза",
+                ["word_total_words"] = "Всего слов",
+                ["word_total_sentences"] = "Предложений",
+                ["word_total_paragraphs"] = "Абзацев",
+                ["word_total_words_in_paragraphs"] = "Слов в абзацах",
+                ["word_h1_count"] = "H1",
+                ["word_h2_count"] = "H2",
+                ["word_h3_count"] = "H3",
+                ["word_h4_count"] = "H4",
+                ["word_h5_count"] = "H5",
+                ["word_total_words_in_headers"] = "Слов в заголовках",
+                ["word_total_words_in_title"] = "Слов в Title",
+                ["word_total_words_in_description"] = "Слов в Description",
+                ["word_image_count"] = "Изображений",
+                ["word_inner_links"] = "Внутр. ссылок",
+                ["word_outer_links"] = "Внешн. ссылок",
+                ["word_total_words_in_links"] = "Слов в ссылках",
+                ["word_kw_words_count"] = "Слов в ключе",
+                ["word_kw_words_in_title"] = "Ключ в Title",
+                ["word_kw_words_in_description"] = "Ключ в Desc",
+                ["word_kw_words_in_headers"] = "Ключ в H1-Hx",
+                ["word_kw_words_in_alt"] = "Ключ в Alt",
+                ["word_kw_words_in_text"] = "Ключ в тексте",
+                ["word_tokens_ratio"] = "Tokens ratio",
+                ["word_kincaid_score"] = "Kincaid",
+                ["word_flesch_reading_ease"] = "Flesch",
+                ["word_gunning_fog"] = "Gunning Fog",
+                ["word_smog_index"] = "SMOG",
+                ["word_ari"] = "ARI",
+                ["word_main_keyword_density"] = "Плотность ключа"
+            };
+
+            foreach (DataGridViewColumn column in analysisGrid.Columns)
+            {
+                if (headers.TryGetValue(column.Name, out string headerText))
+                {
+                    column.HeaderText = headerText;
+                }
+            }
+        }
+
+        private static bool IsPlaceholderValue(object value)
+        {
+            // Определяем служебное значение -1 в разных представлениях
+            if (value is int intValue)
+            {
+                return intValue == -1;
+            }
+
+            if (value is long longValue)
+            {
+                return longValue == -1;
+            }
+
+            if (value is short shortValue)
+            {
+                return shortValue == -1;
+            }
+
+            if (value is double doubleValue)
+            {
+                return Math.Abs(doubleValue + 1d) < 0.000001d;
+            }
+
+            if (value is float floatValue)
+            {
+                return Math.Abs(floatValue + 1f) < 0.000001f;
+            }
+
+            string stringValue = Convert.ToString(value);
+            return string.Equals(stringValue?.Trim(), "-1", StringComparison.Ordinal);
         }
 
         private long GetSelectedSiteId()
@@ -331,6 +472,7 @@ namespace CheckPosition
             // Переключаем доступность кнопок в зависимости от состояния проверки
             checkAllButton.Enabled = enabled;
             checkSelectedButton.Enabled = enabled && analysisGrid.CurrentRow != null;
+            addMissingButton.Enabled = enabled;
             stopButton.Enabled = !enabled;
         }
     }

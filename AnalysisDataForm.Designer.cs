@@ -7,6 +7,7 @@ namespace CheckPosition
         private System.Windows.Forms.Panel topPanel;
         private System.Windows.Forms.Button checkAllButton;
         private System.Windows.Forms.Button checkSelectedButton;
+        private System.Windows.Forms.Button addMissingButton;
         private System.Windows.Forms.Button stopButton;
         private System.Windows.Forms.Label searchLabel;
         private System.Windows.Forms.TextBox searchTextBox;
@@ -26,6 +27,7 @@ namespace CheckPosition
             this.topPanel = new System.Windows.Forms.Panel();
             this.checkAllButton = new System.Windows.Forms.Button();
             this.checkSelectedButton = new System.Windows.Forms.Button();
+            this.addMissingButton = new System.Windows.Forms.Button();
             this.stopButton = new System.Windows.Forms.Button();
             this.searchLabel = new System.Windows.Forms.Label();
             this.searchTextBox = new System.Windows.Forms.TextBox();
@@ -53,6 +55,7 @@ namespace CheckPosition
             this.topPanel.Controls.Add(this.searchTextBox);
             this.topPanel.Controls.Add(this.searchLabel);
             this.topPanel.Controls.Add(this.stopButton);
+            this.topPanel.Controls.Add(this.addMissingButton);
             this.topPanel.Controls.Add(this.checkSelectedButton);
             this.topPanel.Controls.Add(this.checkAllButton);
             this.topPanel.Dock = System.Windows.Forms.DockStyle.Top;
@@ -84,7 +87,7 @@ namespace CheckPosition
             // stopButton
             // 
             this.stopButton.Enabled = false;
-            this.stopButton.Location = new System.Drawing.Point(344, 12);
+            this.stopButton.Location = new System.Drawing.Point(470, 12);
             this.stopButton.Name = "stopButton";
             this.stopButton.Size = new System.Drawing.Size(100, 23);
             this.stopButton.TabIndex = 2;
@@ -92,10 +95,20 @@ namespace CheckPosition
             this.stopButton.UseVisualStyleBackColor = true;
             this.stopButton.Click += new System.EventHandler(this.stopButton_Click);
             // 
+            // addMissingButton
+            // 
+            this.addMissingButton.Location = new System.Drawing.Point(344, 12);
+            this.addMissingButton.Name = "addMissingButton";
+            this.addMissingButton.Size = new System.Drawing.Size(120, 23);
+            this.addMissingButton.TabIndex = 5;
+            this.addMissingButton.Text = "Добавить новые";
+            this.addMissingButton.UseVisualStyleBackColor = true;
+            this.addMissingButton.Click += new System.EventHandler(this.addMissingButton_Click);
+            // 
             // searchLabel
             // 
             this.searchLabel.AutoSize = true;
-            this.searchLabel.Location = new System.Drawing.Point(470, 16);
+            this.searchLabel.Location = new System.Drawing.Point(586, 16);
             this.searchLabel.Name = "searchLabel";
             this.searchLabel.Size = new System.Drawing.Size(49, 13);
             this.searchLabel.TabIndex = 3;
@@ -103,7 +116,7 @@ namespace CheckPosition
             // 
             // searchTextBox
             // 
-            this.searchTextBox.Location = new System.Drawing.Point(525, 13);
+            this.searchTextBox.Location = new System.Drawing.Point(641, 13);
             this.searchTextBox.Name = "searchTextBox";
             this.searchTextBox.Size = new System.Drawing.Size(300, 20);
             this.searchTextBox.TabIndex = 4;
