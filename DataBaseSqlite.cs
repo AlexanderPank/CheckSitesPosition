@@ -563,7 +563,7 @@ namespace CheckPosition
             return result;
         }
 
-        // Загружаем данные аналитики с подстановкой адреса сайта вместо идентификатора
+        // Загружаем данные аналитики с подстановкой позиции сайта вместо адреса
         public DataTable LoadAnalysisData()
         {
             var table = new DataTable();
@@ -572,8 +572,9 @@ namespace CheckPosition
                 EnsureConnectionOpen();
                 using (var command = _connection.CreateCommand())
                 {
+                    // Формируем запрос с нужным порядком колонок, чтобы первые поля совпадали с отображением в форме
                     command.CommandText =
-                        "SELECT a.id, a.site_id, s.page_address, a.check_date, a.page_url, a.strategy, a.fetch_time, " +
+                        "SELECT a.id, a.site_id, a.page_url, s.position_current, a.check_date, a.strategy, a.fetch_time, " +
                         "a.psi_perf_score, a.psi_seo_score, a.psi_bp_score, a.psi_a11y_score, a.psi_lcp_ms, a.psi_cls, " +
                         "a.psi_inp_ms, a.psi_tbt_ms, a.psi_ttfb_ms, a.psi_fcp_ms, a.psi_si_ms, a.psi_bytes, a.psi_req_cnt, " +
                         "a.psi_unused_js_b, a.psi_unused_css_b, a.psi_offscr_img_b, a.psi_modern_img_b, a.psi_opt_img_b, " +

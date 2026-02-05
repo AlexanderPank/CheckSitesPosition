@@ -11,6 +11,7 @@ namespace CheckPosition
         private System.Windows.Forms.Button stopButton;
         private System.Windows.Forms.Label searchLabel;
         private System.Windows.Forms.TextBox searchTextBox;
+        private System.Windows.Forms.FlowLayoutPanel columnsPanel;
 
         protected override void Dispose(bool disposing)
         {
@@ -31,8 +32,10 @@ namespace CheckPosition
             this.stopButton = new System.Windows.Forms.Button();
             this.searchLabel = new System.Windows.Forms.Label();
             this.searchTextBox = new System.Windows.Forms.TextBox();
+            this.columnsPanel = new System.Windows.Forms.FlowLayoutPanel();
             ((System.ComponentModel.ISupportInitialize)(this.analysisGrid)).BeginInit();
             this.topPanel.SuspendLayout();
+            this.columnsPanel.SuspendLayout();
             this.SuspendLayout();
             // 
             // analysisGrid
@@ -42,12 +45,12 @@ namespace CheckPosition
             this.analysisGrid.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.DisplayedCells;
             this.analysisGrid.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.analysisGrid.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.analysisGrid.Location = new System.Drawing.Point(0, 48);
+            this.analysisGrid.Location = new System.Drawing.Point(0, 128);
             this.analysisGrid.MultiSelect = false;
             this.analysisGrid.Name = "analysisGrid";
             this.analysisGrid.ReadOnly = true;
             this.analysisGrid.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.analysisGrid.Size = new System.Drawing.Size(1200, 602);
+            this.analysisGrid.Size = new System.Drawing.Size(1200, 522);
             this.analysisGrid.TabIndex = 0;
             // 
             // topPanel
@@ -122,12 +125,23 @@ namespace CheckPosition
             this.searchTextBox.TabIndex = 4;
             this.searchTextBox.TextChanged += new System.EventHandler(this.searchTextBox_TextChanged);
             // 
+            // columnsPanel
+            // 
+            this.columnsPanel.AutoScroll = true;
+            this.columnsPanel.Dock = System.Windows.Forms.DockStyle.Top;
+            this.columnsPanel.Location = new System.Drawing.Point(0, 48);
+            this.columnsPanel.Name = "columnsPanel";
+            this.columnsPanel.Padding = new System.Windows.Forms.Padding(8, 6, 8, 6);
+            this.columnsPanel.Size = new System.Drawing.Size(1200, 80);
+            this.columnsPanel.TabIndex = 2;
+            // 
             // AnalysisDataForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1200, 650);
             this.Controls.Add(this.analysisGrid);
+            this.Controls.Add(this.columnsPanel);
             this.Controls.Add(this.topPanel);
             this.Name = "AnalysisDataForm";
             this.Text = "Анализ данных";
@@ -135,6 +149,7 @@ namespace CheckPosition
             ((System.ComponentModel.ISupportInitialize)(this.analysisGrid)).EndInit();
             this.topPanel.ResumeLayout(false);
             this.topPanel.PerformLayout();
+            this.columnsPanel.ResumeLayout(false);
             this.ResumeLayout(false);
         }
     }
