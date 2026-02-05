@@ -629,7 +629,7 @@ namespace CheckPosition
                             "-1, -1, -1, -1, -1, " +
                             "-1, -1, -1, " +
                             "-1, -1, -1, -1, -1, -1, " +
-                            "-1, -1, -1, -1, -1, -1, '' " +
+                            "-1, -1, -1, -1, -1, '' " +
                             "FROM sites s " +
                             "WHERE NOT EXISTS (SELECT 1 FROM site_analysis_data a WHERE a.site_id = s.id);";
                         command.Parameters.AddWithValue("$checkDate", DateTimeOffset.Now.ToString("O"));
