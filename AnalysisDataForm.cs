@@ -23,10 +23,12 @@ namespace CheckPosition
         private bool _isRunning;
         private readonly HashSet<string> _hiddenColumns;
         private bool _isUpdatingColumnVisibility;
+        private String psiApiKey;
 
         public AnalysisDataForm(DataBaseSqlite database)
         {
             InitializeComponent();
+            psiApiKey = Environment.GetEnvironmentVariable("PSI_API_KEY") ?? "AIzaSyCwiCkltlDMBBzNlW5R_mKnfROT8LBPWoI";
             // Сохраняем ссылку на базу данных и настраиваем таблицу
             _database = database ?? throw new ArgumentNullException(nameof(database));
             // Загружаем сохраненные настройки скрытых столбцов, чтобы восстановить вид таблицы
@@ -531,7 +533,7 @@ namespace CheckPosition
                 return;
             }
 
-            string psiApiKey = Environment.GetEnvironmentVariable("PSI_API_KEY");
+             
             if (string.IsNullOrWhiteSpace(psiApiKey))
             {
                 MessageBox.Show("Не найден ключ PSI_API_KEY в переменных окружения.");
