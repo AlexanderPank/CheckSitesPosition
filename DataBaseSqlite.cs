@@ -564,16 +564,18 @@ namespace CheckPosition
         }
 
         // Загружаем данные аналитики с подстановкой позиции сайта вместо адреса
-        public DataTable LoadAnalysisData()
+        public DataTable LoadAnalysisData(string strategyFilter)
         {
             var table = new DataTable();
             lock (_dbSync)
             {
                 EnsureConnectionOpen();
+                // Приводим таблицу аналитики к правилу "две записи на сайт", чтобы избежать дублей
+                NormalizeSiteAnalysisRecords();
                 using (var command = _connection.CreateCommand())
                 {
                     // Формируем запрос с нужным порядком колонок, чтобы первые поля совпадали с отображением в форме
-                    command.CommandText =
+                    string baseQuery =
                         "SELECT a.id, a.site_id, a.page_url, s.position_current, a.check_date, a.strategy, a.fetch_time, " +
                         "a.psi_perf_score, a.psi_seo_score, a.psi_bp_score, a.psi_a11y_score, a.psi_lcp_ms, a.psi_cls, " +
                         "a.psi_inp_ms, a.psi_tbt_ms, a.psi_ttfb_ms, a.psi_fcp_ms, a.psi_si_ms, a.psi_bytes, a.psi_req_cnt, " +
@@ -585,8 +587,16 @@ namespace CheckPosition
                         "a.word_kw_words_in_headers, a.word_kw_words_in_alt, a.word_kw_words_in_text, a.word_tokens_ratio, a.word_kincaid_score, " +
                         "a.word_flesch_reading_ease, a.word_gunning_fog, a.word_smog_index, a.word_ari, a.word_main_keyword_density, a.raw_json " +
                         "FROM site_analysis_data a " +
-                        "LEFT JOIN sites s ON s.id = a.site_id " +
-                        "ORDER BY a.id DESC;";
+                        "LEFT JOIN sites s ON s.id = a.site_id ";
+
+                    if (!string.IsNullOrWhiteSpace(strategyFilter))
+                    {
+                        // Фильтруем данные по стратегии, чтобы в таблице оставалась одна запись на сайт
+                        baseQuery += "WHERE a.strategy = $strategy ";
+                        command.Parameters.AddWithValue("$strategy", strategyFilter);
+                    }
+
+                    command.CommandText = baseQuery + "ORDER BY a.id DESC;";
                     using (var reader = command.ExecuteReader())
                     {
                         table.Load(reader);
@@ -596,7 +606,7 @@ namespace CheckPosition
             return table;
         }
 
-        // Добавляем пустые записи аналитики для сайтов, которых нет в таблице site_analysis_data
+        // Добавляем пустые записи аналитики для сайтов, которых нет в таблице site_analysis_data по каждой стратегии
         public int InsertMissingAnalysisRecords()
         {
             lock (_dbSync)
@@ -604,6 +614,8 @@ namespace CheckPosition
                 EnsureConnectionOpen();
                 using (var transaction = _connection.BeginTransaction())
                 {
+                    int inserted = 0;
+                    string checkDate = DateTimeOffset.Now.ToString("O");
                     using (var command = _connection.CreateCommand())
                     {
                         // Формируем массовую вставку с дефолтными значениями, чтобы избежать циклов и лишних запросов
@@ -621,7 +633,7 @@ namespace CheckPosition
                             "word_kw_words_in_headers, word_kw_words_in_alt, word_kw_words_in_text, word_tokens_ratio, word_kincaid_score, " +
                             "word_flesch_reading_ease, word_gunning_fog, word_smog_index, word_ari, word_main_keyword_density, raw_json" +
                             ") " +
-                            "SELECT s.id, $checkDate, s.page_address, '', '', " +
+                            "SELECT s.id, $checkDate, s.page_address, $strategy, '', " +
                             "-1, -1, -1, -1, -1, -1, -1, -1, " +
                             "-1, -1, -1, -1, -1, -1, -1, " +
                             "-1, -1, -1, " +
@@ -632,19 +644,27 @@ namespace CheckPosition
                             "-1, -1, -1, -1, -1, -1, " +
                             "-1, -1, -1, -1, -1, '' " +
                             "FROM sites s " +
-                            "WHERE NOT EXISTS (SELECT 1 FROM site_analysis_data a WHERE a.site_id = s.id);";
-                        command.Parameters.AddWithValue("$checkDate", DateTimeOffset.Now.ToString("O"));
+                            "WHERE NOT EXISTS (SELECT 1 FROM site_analysis_data a WHERE a.site_id = s.id AND a.strategy = $strategy);";
+                        // Добавляем записи для mobile-стратегии
+                        command.Parameters.AddWithValue("$checkDate", checkDate);
+                        command.Parameters.AddWithValue("$strategy", "Mobile");
+                        inserted += command.ExecuteNonQuery();
 
-                        int inserted = command.ExecuteNonQuery();
-                        transaction.Commit();
-                        return inserted;
+                        // Добавляем записи для desktop-стратегии
+                        command.Parameters.Clear();
+                        command.Parameters.AddWithValue("$checkDate", checkDate);
+                        command.Parameters.AddWithValue("$strategy", "Desktop");
+                        inserted += command.ExecuteNonQuery();
                     }
+
+                    transaction.Commit();
+                    return inserted;
                 }
             }
         }
 
-        // Добавляем запись аналитики по результатам парсеров и возвращаем идентификатор вставленной строки
-        public long InsertSiteAnalysisRecord(long siteId, string pageUrl, string keyword, DateTimeOffset checkDate, PageSpeedMetrics psiMetrics, ParsedPageMetrics wordMetrics)
+        // Обновляем запись аналитики по результатам парсеров и возвращаем признак успешного обновления
+        public bool UpdateSiteAnalysisRecord(long siteId, string pageUrl, string keyword, DateTimeOffset checkDate, PageSpeedMetrics psiMetrics, ParsedPageMetrics wordMetrics)
         {
             if (siteId <= 0)
             {
@@ -656,7 +676,7 @@ namespace CheckPosition
                 throw new ArgumentNullException(nameof(psiMetrics));
             }
 
-            // Готовим значения для безопасной вставки с учетом возможных null в метриках
+            // Готовим значения для безопасного обновления с учетом возможных null в метриках
             object DbValue(string value) => string.IsNullOrWhiteSpace(value) ? (object)DBNull.Value : value;
             object DbValueDouble(double? value) => value.HasValue ? (object)value.Value : DBNull.Value;
             object DbValueInt(int? value) => value.HasValue ? (object)value.Value : DBNull.Value;
@@ -665,106 +685,112 @@ namespace CheckPosition
             lock (_dbSync)
             {
                 EnsureConnectionOpen();
-                using (var transaction = _connection.BeginTransaction())
+                using (var command = _connection.CreateCommand())
                 {
-                    using (var command = _connection.CreateCommand())
-                    {
-                        command.Transaction = transaction;
-                        command.CommandText =
-                            "INSERT INTO site_analysis_data (" +
-                            "site_id, check_date, page_url, strategy, fetch_time, " +
-                            "psi_perf_score, psi_seo_score, psi_bp_score, psi_a11y_score, psi_lcp_ms, psi_cls, psi_inp_ms, psi_tbt_ms, " +
-                            "psi_ttfb_ms, psi_fcp_ms, psi_si_ms, psi_bytes, psi_req_cnt, psi_unused_js_b, psi_unused_css_b, " +
-                            "psi_offscr_img_b, psi_modern_img_b, psi_opt_img_b, " +
-                            "word_keyword, word_total_words, word_total_sentences, word_total_paragraphs, word_total_words_in_paragraphs, " +
-                            "word_h1_count, word_h2_count, word_h3_count, word_h4_count, word_h5_count, word_total_words_in_headers, " +
-                            "word_total_words_in_title, word_total_words_in_description, word_image_count, word_inner_links, word_outer_links, " +
-                            "word_total_words_in_links, word_kw_words_count, word_kw_words_in_title, word_kw_words_in_description, " +
-                            "word_kw_words_in_headers, word_kw_words_in_alt, word_kw_words_in_text, word_tokens_ratio, word_kincaid_score, " +
-                            "word_flesch_reading_ease, word_gunning_fog, word_smog_index, word_ari, word_main_keyword_density, raw_json" +
-                            ") VALUES (" +
-                            "$siteId, $checkDate, $pageUrl, $strategy, $fetchTime, " +
-                            "$psiPerfScore, $psiSeoScore, $psiBpScore, $psiA11yScore, $psiLcpMs, $psiCls, $psiInpMs, $psiTbtMs, " +
-                            "$psiTtfbMs, $psiFcpMs, $psiSiMs, $psiBytes, $psiReqCnt, $psiUnusedJsB, $psiUnusedCssB, " +
-                            "$psiOffscrImgB, $psiModernImgB, $psiOptImgB, " +
-                            "$wordKeyword, $wordTotalWords, $wordTotalSentences, $wordTotalParagraphs, $wordTotalWordsInParagraphs, " +
-                            "$wordH1Count, $wordH2Count, $wordH3Count, $wordH4Count, $wordH5Count, $wordTotalWordsInHeaders, " +
-                            "$wordTotalWordsInTitle, $wordTotalWordsInDescription, $wordImageCount, $wordInnerLinks, $wordOuterLinks, " +
-                            "$wordTotalWordsInLinks, $wordKwWordsCount, $wordKwWordsInTitle, $wordKwWordsInDescription, " +
-                            "$wordKwWordsInHeaders, $wordKwWordsInAlt, $wordKwWordsInText, $wordTokensRatio, $wordKincaidScore, " +
-                            "$wordFleschReadingEase, $wordGunningFog, $wordSmogIndex, $wordAri, $wordMainKeywordDensity, $rawJson" +
-                            ");";
+                    command.CommandText =
+                        "UPDATE site_analysis_data SET " +
+                        "check_date = $checkDate, page_url = $pageUrl, strategy = $strategy, fetch_time = $fetchTime, " +
+                        "psi_perf_score = $psiPerfScore, psi_seo_score = $psiSeoScore, psi_bp_score = $psiBpScore, psi_a11y_score = $psiA11yScore, " +
+                        "psi_lcp_ms = $psiLcpMs, psi_cls = $psiCls, psi_inp_ms = $psiInpMs, psi_tbt_ms = $psiTbtMs, psi_ttfb_ms = $psiTtfbMs, " +
+                        "psi_fcp_ms = $psiFcpMs, psi_si_ms = $psiSiMs, psi_bytes = $psiBytes, psi_req_cnt = $psiReqCnt, " +
+                        "psi_unused_js_b = $psiUnusedJsB, psi_unused_css_b = $psiUnusedCssB, psi_offscr_img_b = $psiOffscrImgB, " +
+                        "psi_modern_img_b = $psiModernImgB, psi_opt_img_b = $psiOptImgB, " +
+                        "word_keyword = $wordKeyword, word_total_words = $wordTotalWords, word_total_sentences = $wordTotalSentences, " +
+                        "word_total_paragraphs = $wordTotalParagraphs, word_total_words_in_paragraphs = $wordTotalWordsInParagraphs, " +
+                        "word_h1_count = $wordH1Count, word_h2_count = $wordH2Count, word_h3_count = $wordH3Count, word_h4_count = $wordH4Count, " +
+                        "word_h5_count = $wordH5Count, word_total_words_in_headers = $wordTotalWordsInHeaders, " +
+                        "word_total_words_in_title = $wordTotalWordsInTitle, word_total_words_in_description = $wordTotalWordsInDescription, " +
+                        "word_image_count = $wordImageCount, word_inner_links = $wordInnerLinks, word_outer_links = $wordOuterLinks, " +
+                        "word_total_words_in_links = $wordTotalWordsInLinks, word_kw_words_count = $wordKwWordsCount, " +
+                        "word_kw_words_in_title = $wordKwWordsInTitle, word_kw_words_in_description = $wordKwWordsInDescription, " +
+                        "word_kw_words_in_headers = $wordKwWordsInHeaders, word_kw_words_in_alt = $wordKwWordsInAlt, " +
+                        "word_kw_words_in_text = $wordKwWordsInText, word_tokens_ratio = $wordTokensRatio, word_kincaid_score = $wordKincaidScore, " +
+                        "word_flesch_reading_ease = $wordFleschReadingEase, word_gunning_fog = $wordGunningFog, " +
+                        "word_smog_index = $wordSmogIndex, word_ari = $wordAri, word_main_keyword_density = $wordMainKeywordDensity, " +
+                        "raw_json = $rawJson " +
+                        "WHERE site_id = $siteId AND strategy = $strategy;";
 
-                        command.Parameters.AddWithValue("$siteId", siteId);
-                        command.Parameters.AddWithValue("$checkDate", checkDate.ToString("O"));
-                        command.Parameters.AddWithValue("$pageUrl", DbValue(pageUrl));
-                        command.Parameters.AddWithValue("$strategy", DbValue(psiMetrics.Strategy.ToString()));
-                        command.Parameters.AddWithValue("$fetchTime", DbValueDate(psiMetrics.FetchTime));
-                        command.Parameters.AddWithValue("$psiPerfScore", DbValueDouble(psiMetrics.PerformanceScore));
-                        command.Parameters.AddWithValue("$psiSeoScore", DbValueDouble(psiMetrics.SeoScore));
-                        command.Parameters.AddWithValue("$psiBpScore", DbValueDouble(psiMetrics.BestPracticesScore));
-                        command.Parameters.AddWithValue("$psiA11yScore", DbValueDouble(psiMetrics.AccessibilityScore));
-                        command.Parameters.AddWithValue("$psiLcpMs", DbValueDouble(psiMetrics.LargestContentfulPaintMs));
-                        command.Parameters.AddWithValue("$psiCls", DbValueDouble(psiMetrics.CumulativeLayoutShift));
-                        command.Parameters.AddWithValue("$psiInpMs", DbValueDouble(psiMetrics.InteractionToNextPaintMs));
-                        command.Parameters.AddWithValue("$psiTbtMs", DbValueDouble(psiMetrics.TotalBlockingTimeMs));
-                        command.Parameters.AddWithValue("$psiTtfbMs", DbValueDouble(psiMetrics.ServerResponseTimeMs));
-                        command.Parameters.AddWithValue("$psiFcpMs", DbValueDouble(psiMetrics.FirstContentfulPaintMs));
-                        command.Parameters.AddWithValue("$psiSiMs", DbValueDouble(psiMetrics.SpeedIndexMs));
-                        command.Parameters.AddWithValue("$psiBytes", DbValueDouble(psiMetrics.TotalByteWeight));
-                        command.Parameters.AddWithValue("$psiReqCnt", DbValueInt(psiMetrics.NetworkRequestsCount));
-                        command.Parameters.AddWithValue("$psiUnusedJsB", DbValueDouble(psiMetrics.UnusedJavaScriptSavingsBytes));
-                        command.Parameters.AddWithValue("$psiUnusedCssB", DbValueDouble(psiMetrics.UnusedCssSavingsBytes));
-                        command.Parameters.AddWithValue("$psiOffscrImgB", DbValueDouble(psiMetrics.OffscreenImagesSavingsBytes));
-                        command.Parameters.AddWithValue("$psiModernImgB", DbValueDouble(psiMetrics.ModernImageFormatsSavingsBytes));
-                        command.Parameters.AddWithValue("$psiOptImgB", DbValueDouble(psiMetrics.UsesOptimizedImagesSavingsBytes));
+                    command.Parameters.AddWithValue("$siteId", siteId);
+                    command.Parameters.AddWithValue("$checkDate", checkDate.ToString("O"));
+                    command.Parameters.AddWithValue("$pageUrl", DbValue(pageUrl));
+                    command.Parameters.AddWithValue("$strategy", DbValue(psiMetrics.Strategy.ToString()));
+                    command.Parameters.AddWithValue("$fetchTime", DbValueDate(psiMetrics.FetchTime));
+                    command.Parameters.AddWithValue("$psiPerfScore", DbValueDouble(psiMetrics.PerformanceScore));
+                    command.Parameters.AddWithValue("$psiSeoScore", DbValueDouble(psiMetrics.SeoScore));
+                    command.Parameters.AddWithValue("$psiBpScore", DbValueDouble(psiMetrics.BestPracticesScore));
+                    command.Parameters.AddWithValue("$psiA11yScore", DbValueDouble(psiMetrics.AccessibilityScore));
+                    command.Parameters.AddWithValue("$psiLcpMs", DbValueDouble(psiMetrics.LargestContentfulPaintMs));
+                    command.Parameters.AddWithValue("$psiCls", DbValueDouble(psiMetrics.CumulativeLayoutShift));
+                    command.Parameters.AddWithValue("$psiInpMs", DbValueDouble(psiMetrics.InteractionToNextPaintMs));
+                    command.Parameters.AddWithValue("$psiTbtMs", DbValueDouble(psiMetrics.TotalBlockingTimeMs));
+                    command.Parameters.AddWithValue("$psiTtfbMs", DbValueDouble(psiMetrics.ServerResponseTimeMs));
+                    command.Parameters.AddWithValue("$psiFcpMs", DbValueDouble(psiMetrics.FirstContentfulPaintMs));
+                    command.Parameters.AddWithValue("$psiSiMs", DbValueDouble(psiMetrics.SpeedIndexMs));
+                    command.Parameters.AddWithValue("$psiBytes", DbValueDouble(psiMetrics.TotalByteWeight));
+                    command.Parameters.AddWithValue("$psiReqCnt", DbValueInt(psiMetrics.NetworkRequestsCount));
+                    command.Parameters.AddWithValue("$psiUnusedJsB", DbValueDouble(psiMetrics.UnusedJavaScriptSavingsBytes));
+                    command.Parameters.AddWithValue("$psiUnusedCssB", DbValueDouble(psiMetrics.UnusedCssSavingsBytes));
+                    command.Parameters.AddWithValue("$psiOffscrImgB", DbValueDouble(psiMetrics.OffscreenImagesSavingsBytes));
+                    command.Parameters.AddWithValue("$psiModernImgB", DbValueDouble(psiMetrics.ModernImageFormatsSavingsBytes));
+                    command.Parameters.AddWithValue("$psiOptImgB", DbValueDouble(psiMetrics.UsesOptimizedImagesSavingsBytes));
 
-                        // Используем ключевую фразу из метрик, а при отсутствии берем исходный запрос сайта
-                        string effectiveKeyword = !string.IsNullOrWhiteSpace(wordMetrics?.Keyword) ? wordMetrics.Keyword : keyword;
-                        command.Parameters.AddWithValue("$wordKeyword", DbValue(effectiveKeyword));
-                        command.Parameters.AddWithValue("$wordTotalWords", DbValueInt(wordMetrics?.TotalWords));
-                        command.Parameters.AddWithValue("$wordTotalSentences", DbValueInt(wordMetrics?.TotalSentences));
-                        command.Parameters.AddWithValue("$wordTotalParagraphs", DbValueInt(wordMetrics?.TotalParagraphs));
-                        command.Parameters.AddWithValue("$wordTotalWordsInParagraphs", DbValueInt(wordMetrics?.TotalWordsInParagraphs));
-                        command.Parameters.AddWithValue("$wordH1Count", DbValueInt(wordMetrics?.H1Count));
-                        command.Parameters.AddWithValue("$wordH2Count", DbValueInt(wordMetrics?.H2Count));
-                        command.Parameters.AddWithValue("$wordH3Count", DbValueInt(wordMetrics?.H3Count));
-                        command.Parameters.AddWithValue("$wordH4Count", DbValueInt(wordMetrics?.H4Count));
-                        command.Parameters.AddWithValue("$wordH5Count", DbValueInt(wordMetrics?.H5Count));
-                        command.Parameters.AddWithValue("$wordTotalWordsInHeaders", DbValueInt(wordMetrics?.TotalWordsInHeaders));
-                        command.Parameters.AddWithValue("$wordTotalWordsInTitle", DbValueInt(wordMetrics?.TotalWordsInTitle));
-                        command.Parameters.AddWithValue("$wordTotalWordsInDescription", DbValueInt(wordMetrics?.TotalWordsInDescription));
-                        command.Parameters.AddWithValue("$wordImageCount", DbValueInt(wordMetrics?.ImageCount));
-                        command.Parameters.AddWithValue("$wordInnerLinks", DbValueInt(wordMetrics?.InnerLinks));
-                        command.Parameters.AddWithValue("$wordOuterLinks", DbValueInt(wordMetrics?.OuterLinks));
-                        command.Parameters.AddWithValue("$wordTotalWordsInLinks", DbValueInt(wordMetrics?.TotalWordsInLinks));
-                        command.Parameters.AddWithValue("$wordKwWordsCount", DbValueInt(wordMetrics?.KeywordWordsCount));
-                        command.Parameters.AddWithValue("$wordKwWordsInTitle", DbValueInt(wordMetrics?.KeywordWordsInTitle));
-                        command.Parameters.AddWithValue("$wordKwWordsInDescription", DbValueInt(wordMetrics?.KeywordWordsInDescription));
-                        command.Parameters.AddWithValue("$wordKwWordsInHeaders", DbValueInt(wordMetrics?.KeywordWordsInHeaders));
-                        command.Parameters.AddWithValue("$wordKwWordsInAlt", DbValueInt(wordMetrics?.KeywordWordsInAlt));
-                        command.Parameters.AddWithValue("$wordKwWordsInText", DbValueInt(wordMetrics?.KeywordWordsInText));
-                        command.Parameters.AddWithValue("$wordTokensRatio", DbValueDouble(wordMetrics?.TokensRatio));
-                        command.Parameters.AddWithValue("$wordKincaidScore", DbValueDouble(wordMetrics?.KincaidScore));
-                        command.Parameters.AddWithValue("$wordFleschReadingEase", DbValueDouble(wordMetrics?.FleschReadingEase));
-                        command.Parameters.AddWithValue("$wordGunningFog", DbValueDouble(wordMetrics?.GunningFog));
-                        command.Parameters.AddWithValue("$wordSmogIndex", DbValueDouble(wordMetrics?.SmogIndex));
-                        command.Parameters.AddWithValue("$wordAri", DbValueDouble(wordMetrics?.AutomatedReadabilityIndex));
-                        command.Parameters.AddWithValue("$wordMainKeywordDensity", DbValueDouble(wordMetrics?.MainKeywordDensity));
-                        command.Parameters.AddWithValue("$rawJson", DbValue(wordMetrics?.RawJson));
+                    // Используем ключевую фразу из метрик, а при отсутствии берем исходный запрос сайта
+                    string effectiveKeyword = !string.IsNullOrWhiteSpace(wordMetrics?.Keyword) ? wordMetrics.Keyword : keyword;
+                    command.Parameters.AddWithValue("$wordKeyword", DbValue(effectiveKeyword));
+                    command.Parameters.AddWithValue("$wordTotalWords", DbValueInt(wordMetrics?.TotalWords));
+                    command.Parameters.AddWithValue("$wordTotalSentences", DbValueInt(wordMetrics?.TotalSentences));
+                    command.Parameters.AddWithValue("$wordTotalParagraphs", DbValueInt(wordMetrics?.TotalParagraphs));
+                    command.Parameters.AddWithValue("$wordTotalWordsInParagraphs", DbValueInt(wordMetrics?.TotalWordsInParagraphs));
+                    command.Parameters.AddWithValue("$wordH1Count", DbValueInt(wordMetrics?.H1Count));
+                    command.Parameters.AddWithValue("$wordH2Count", DbValueInt(wordMetrics?.H2Count));
+                    command.Parameters.AddWithValue("$wordH3Count", DbValueInt(wordMetrics?.H3Count));
+                    command.Parameters.AddWithValue("$wordH4Count", DbValueInt(wordMetrics?.H4Count));
+                    command.Parameters.AddWithValue("$wordH5Count", DbValueInt(wordMetrics?.H5Count));
+                    command.Parameters.AddWithValue("$wordTotalWordsInHeaders", DbValueInt(wordMetrics?.TotalWordsInHeaders));
+                    command.Parameters.AddWithValue("$wordTotalWordsInTitle", DbValueInt(wordMetrics?.TotalWordsInTitle));
+                    command.Parameters.AddWithValue("$wordTotalWordsInDescription", DbValueInt(wordMetrics?.TotalWordsInDescription));
+                    command.Parameters.AddWithValue("$wordImageCount", DbValueInt(wordMetrics?.ImageCount));
+                    command.Parameters.AddWithValue("$wordInnerLinks", DbValueInt(wordMetrics?.InnerLinks));
+                    command.Parameters.AddWithValue("$wordOuterLinks", DbValueInt(wordMetrics?.OuterLinks));
+                    command.Parameters.AddWithValue("$wordTotalWordsInLinks", DbValueInt(wordMetrics?.TotalWordsInLinks));
+                    command.Parameters.AddWithValue("$wordKwWordsCount", DbValueInt(wordMetrics?.KeywordWordsCount));
+                    command.Parameters.AddWithValue("$wordKwWordsInTitle", DbValueInt(wordMetrics?.KeywordWordsInTitle));
+                    command.Parameters.AddWithValue("$wordKwWordsInDescription", DbValueInt(wordMetrics?.KeywordWordsInDescription));
+                    command.Parameters.AddWithValue("$wordKwWordsInHeaders", DbValueInt(wordMetrics?.KeywordWordsInHeaders));
+                    command.Parameters.AddWithValue("$wordKwWordsInAlt", DbValueInt(wordMetrics?.KeywordWordsInAlt));
+                    command.Parameters.AddWithValue("$wordKwWordsInText", DbValueInt(wordMetrics?.KeywordWordsInText));
+                    command.Parameters.AddWithValue("$wordTokensRatio", DbValueDouble(wordMetrics?.TokensRatio));
+                    command.Parameters.AddWithValue("$wordKincaidScore", DbValueDouble(wordMetrics?.KincaidScore));
+                    command.Parameters.AddWithValue("$wordFleschReadingEase", DbValueDouble(wordMetrics?.FleschReadingEase));
+                    command.Parameters.AddWithValue("$wordGunningFog", DbValueDouble(wordMetrics?.GunningFog));
+                    command.Parameters.AddWithValue("$wordSmogIndex", DbValueDouble(wordMetrics?.SmogIndex));
+                    command.Parameters.AddWithValue("$wordAri", DbValueDouble(wordMetrics?.AutomatedReadabilityIndex));
+                    command.Parameters.AddWithValue("$wordMainKeywordDensity", DbValueDouble(wordMetrics?.MainKeywordDensity));
+                    command.Parameters.AddWithValue("$rawJson", DbValue(wordMetrics?.RawJson));
 
-                        command.ExecuteNonQuery();
-                    }
-
-                    using (var idCommand = _connection.CreateCommand())
-                    {
-                        idCommand.Transaction = transaction;
-                        idCommand.CommandText = "SELECT last_insert_rowid();";
-                        long id = Convert.ToInt64(idCommand.ExecuteScalar());
-                        transaction.Commit();
-                        return id;
-                    }
+                    int affected = command.ExecuteNonQuery();
+                    return affected > 0;
                 }
+            }
+        }
+
+        // Нормализуем таблицу аналитики, оставляя по одной записи на стратегию для каждого сайта
+        private void NormalizeSiteAnalysisRecords()
+        {
+            using (var command = _connection.CreateCommand())
+            {
+                // Удаляем записи со стратегией вне списка, чтобы оставить только mobile и desktop
+                command.CommandText =
+                    "DELETE FROM site_analysis_data WHERE strategy IS NULL OR TRIM(strategy) = '' OR strategy NOT IN ('Mobile', 'Desktop');";
+                command.ExecuteNonQuery();
+
+                // Удаляем дубликаты, сохраняя по одной записи на стратегию и сайт
+                command.CommandText =
+                    "DELETE FROM site_analysis_data " +
+                    "WHERE id NOT IN (" +
+                    "SELECT MAX(id) FROM site_analysis_data GROUP BY site_id, strategy" +
+                    ");";
+                command.ExecuteNonQuery();
             }
         }
 

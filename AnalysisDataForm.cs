@@ -16,6 +16,8 @@ namespace CheckPosition
         private const int SearchMinLength = 4;
         private const int ParserTimeoutSeconds = 90;
         private const string HiddenColumnsFileName = "analysis_hidden_columns.txt";
+        private const string StrategyMobile = "Mobile";
+        private const string StrategyDesktop = "Desktop";
 
         private readonly DataBaseSqlite _database;
         private DataTable _analysisTable;
@@ -37,6 +39,8 @@ namespace CheckPosition
             analysisGrid.DataBindingComplete += AnalysisGrid_DataBindingComplete;
             analysisGrid.SelectionChanged += AnalysisGrid_SelectionChanged;
             analysisGrid.CellFormatting += AnalysisGrid_CellFormatting;
+            // Настраиваем фильтр стратегии, чтобы отображать только mobile или desktop
+            ConfigureStrategyFilter();
         }
 
         private void AnalysisDataForm_Shown(object sender, EventArgs e)
@@ -107,7 +111,7 @@ namespace CheckPosition
 
         private void addMissingButton_Click(object sender, EventArgs e)
         {
-            // Добавляем пустые записи аналитики для сайтов, у которых еще нет данных
+            // Добавляем пустые записи аналитики для сайтов, у которых еще нет данных по обеим стратегиям
             try
             {
                 int addedCount = _database.InsertMissingAnalysisRecords();
@@ -117,6 +121,25 @@ namespace CheckPosition
             catch (Exception ex)
             {
                 MessageBox.Show("Ошибка добавления записей: " + ex.Message);
+            }
+        }
+
+        private void strategyComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Перезагружаем данные при смене стратегии, чтобы пользователь видел корректную выборку
+            LoadAnalysisData();
+        }
+
+        private void exportCsvButton_Click(object sender, EventArgs e)
+        {
+            // Выгружаем текущую таблицу в CSV с учетом фильтра и видимых столбцов
+            try
+            {
+                ExportCurrentViewToCsv();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка выгрузки CSV: " + ex.Message);
             }
         }
 
@@ -136,7 +159,8 @@ namespace CheckPosition
             // Загружаем и показываем данные аналитики из базы
             try
             {
-                _analysisTable = _database.LoadAnalysisData();
+                string strategyFilter = GetSelectedStrategyFilter();
+                _analysisTable = _database.LoadAnalysisData(strategyFilter);
                 analysisGrid.DataSource = _analysisTable;
                 UpdateGridColumns();
             }
@@ -615,8 +639,31 @@ namespace CheckPosition
                                 .ConfigureAwait(true);
 
                             DateTimeOffset checkDate = DateTimeOffset.Now;
-                            _database.InsertSiteAnalysisRecord(target.Id, target.PageAddress, target.Query, checkDate, mobileMetrics, wordMetrics);
-                            _database.InsertSiteAnalysisRecord(target.Id, target.PageAddress, target.Query, checkDate, desktopMetrics, wordMetrics);
+                            bool mobileUpdated = _database.UpdateSiteAnalysisRecord(
+                                target.Id,
+                                target.PageAddress,
+                                target.Query,
+                                checkDate,
+                                mobileMetrics,
+                                wordMetrics);
+
+                            bool desktopUpdated = _database.UpdateSiteAnalysisRecord(
+                                target.Id,
+                                target.PageAddress,
+                                target.Query,
+                                checkDate,
+                                desktopMetrics,
+                                wordMetrics);
+
+                            if (!mobileUpdated)
+                            {
+                                errors.Add($"Не найдена запись для mobile: сайт id={target.Id}. Добавьте запись через кнопку 'Добавить новые'.");
+                            }
+
+                            if (!desktopUpdated)
+                            {
+                                errors.Add($"Не найдена запись для desktop: сайт id={target.Id}. Добавьте запись через кнопку 'Добавить новые'.");
+                            }
                         }
                         catch (OperationCanceledException)
                         {
@@ -652,6 +699,111 @@ namespace CheckPosition
             checkSelectedButton.Enabled = enabled && analysisGrid.CurrentRow != null;
             addMissingButton.Enabled = enabled;
             stopButton.Enabled = !enabled;
+            exportCsvButton.Enabled = enabled;
+            strategyComboBox.Enabled = enabled;
+        }
+
+        private void ConfigureStrategyFilter()
+        {
+            // Заполняем комбобокс фиксированными значениями стратегий без возможности ввода
+            var items = new List<StrategyFilterItem>
+            {
+                new StrategyFilterItem("Desktop", StrategyDesktop),
+                new StrategyFilterItem("Mobile", StrategyMobile)
+            };
+
+            strategyComboBox.DisplayMember = nameof(StrategyFilterItem.DisplayName);
+            strategyComboBox.ValueMember = nameof(StrategyFilterItem.Value);
+            strategyComboBox.DataSource = items;
+            strategyComboBox.SelectedIndex = 0;
+        }
+
+        private string GetSelectedStrategyFilter()
+        {
+            // Возвращаем выбранную стратегию для фильтрации или пустую строку, если выбор недоступен
+            if (strategyComboBox?.SelectedItem is StrategyFilterItem item)
+            {
+                return item.Value;
+            }
+
+            return string.Empty;
+        }
+
+        private void ExportCurrentViewToCsv()
+        {
+            // Формируем CSV по текущей таблице и сохраняем файл в выбранное место
+            if (analysisGrid.DataSource == null || analysisGrid.Rows.Count == 0)
+            {
+                MessageBox.Show("Нет данных для выгрузки.");
+                return;
+            }
+
+            using (var dialog = new SaveFileDialog())
+            {
+                dialog.Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*";
+                dialog.FileName = $"analysis_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                var lines = BuildCsvLines();
+                File.WriteAllLines(dialog.FileName, lines);
+                MessageBox.Show("Выгрузка завершена: " + dialog.FileName);
+            }
+        }
+
+        private List<string> BuildCsvLines()
+        {
+            // Собираем строки CSV по видимым колонкам и текущим данным таблицы
+            var visibleColumns = analysisGrid.Columns.Cast<DataGridViewColumn>()
+                .Where(column => column.Visible)
+                .OrderBy(column => column.DisplayIndex)
+                .ToList();
+
+            var lines = new List<string>(analysisGrid.Rows.Count + 1);
+            string headerLine = string.Join(",", visibleColumns.Select(column => EscapeCsvValue(column.HeaderText)));
+            lines.Add(headerLine);
+
+            foreach (DataGridViewRow row in analysisGrid.Rows)
+            {
+                if (row.IsNewRow)
+                {
+                    continue;
+                }
+
+                var cells = visibleColumns.Select(column => EscapeCsvValue(Convert.ToString(row.Cells[column.Name].Value)));
+                lines.Add(string.Join(",", cells));
+            }
+
+            return lines;
+        }
+
+        private static string EscapeCsvValue(string value)
+        {
+            // Экранируем значения CSV, чтобы корректно сохранять запятые, кавычки и переносы строк
+            string safeValue = value ?? string.Empty;
+            bool shouldQuote = safeValue.Contains(",") || safeValue.Contains("\"") || safeValue.Contains("\n") || safeValue.Contains("\r");
+            if (!shouldQuote)
+            {
+                return safeValue;
+            }
+
+            string escaped = safeValue.Replace("\"", "\"\"");
+            return $"\"{escaped}\"";
+        }
+
+        private sealed class StrategyFilterItem
+        {
+            // Описываем элемент фильтра стратегии для комбобокса
+            public StrategyFilterItem(string displayName, string value)
+            {
+                DisplayName = displayName;
+                Value = value;
+            }
+
+            public string DisplayName { get; }
+            public string Value { get; }
         }
     }
 }

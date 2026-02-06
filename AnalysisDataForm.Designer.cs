@@ -12,6 +12,9 @@ namespace CheckPosition
         private System.Windows.Forms.Label searchLabel;
         private System.Windows.Forms.TextBox searchTextBox;
         private System.Windows.Forms.FlowLayoutPanel columnsPanel;
+        private System.Windows.Forms.ComboBox strategyComboBox;
+        private System.Windows.Forms.Label strategyLabel;
+        private System.Windows.Forms.Button exportCsvButton;
 
         protected override void Dispose(bool disposing)
         {
@@ -33,6 +36,9 @@ namespace CheckPosition
             this.searchLabel = new System.Windows.Forms.Label();
             this.searchTextBox = new System.Windows.Forms.TextBox();
             this.columnsPanel = new System.Windows.Forms.FlowLayoutPanel();
+            this.strategyComboBox = new System.Windows.Forms.ComboBox();
+            this.strategyLabel = new System.Windows.Forms.Label();
+            this.exportCsvButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.analysisGrid)).BeginInit();
             this.topPanel.SuspendLayout();
             this.columnsPanel.SuspendLayout();
@@ -55,6 +61,9 @@ namespace CheckPosition
             // 
             // topPanel
             // 
+            this.topPanel.Controls.Add(this.exportCsvButton);
+            this.topPanel.Controls.Add(this.strategyComboBox);
+            this.topPanel.Controls.Add(this.strategyLabel);
             this.topPanel.Controls.Add(this.searchTextBox);
             this.topPanel.Controls.Add(this.searchLabel);
             this.topPanel.Controls.Add(this.stopButton);
@@ -111,7 +120,7 @@ namespace CheckPosition
             // searchLabel
             // 
             this.searchLabel.AutoSize = true;
-            this.searchLabel.Location = new System.Drawing.Point(586, 16);
+            this.searchLabel.Location = new System.Drawing.Point(758, 16);
             this.searchLabel.Name = "searchLabel";
             this.searchLabel.Size = new System.Drawing.Size(49, 13);
             this.searchLabel.TabIndex = 3;
@@ -119,11 +128,40 @@ namespace CheckPosition
             // 
             // searchTextBox
             // 
-            this.searchTextBox.Location = new System.Drawing.Point(641, 13);
+            this.searchTextBox.Location = new System.Drawing.Point(813, 13);
             this.searchTextBox.Name = "searchTextBox";
             this.searchTextBox.Size = new System.Drawing.Size(300, 20);
             this.searchTextBox.TabIndex = 4;
             this.searchTextBox.TextChanged += new System.EventHandler(this.searchTextBox_TextChanged);
+            // 
+            // strategyComboBox
+            // 
+            this.strategyComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.strategyComboBox.FormattingEnabled = true;
+            this.strategyComboBox.Location = new System.Drawing.Point(639, 13);
+            this.strategyComboBox.Name = "strategyComboBox";
+            this.strategyComboBox.Size = new System.Drawing.Size(110, 21);
+            this.strategyComboBox.TabIndex = 6;
+            this.strategyComboBox.SelectedIndexChanged += new System.EventHandler(this.strategyComboBox_SelectedIndexChanged);
+            // 
+            // strategyLabel
+            // 
+            this.strategyLabel.AutoSize = true;
+            this.strategyLabel.Location = new System.Drawing.Point(586, 16);
+            this.strategyLabel.Name = "strategyLabel";
+            this.strategyLabel.Size = new System.Drawing.Size(47, 13);
+            this.strategyLabel.TabIndex = 7;
+            this.strategyLabel.Text = "Версия:";
+            // 
+            // exportCsvButton
+            // 
+            this.exportCsvButton.Location = new System.Drawing.Point(1120, 12);
+            this.exportCsvButton.Name = "exportCsvButton";
+            this.exportCsvButton.Size = new System.Drawing.Size(68, 23);
+            this.exportCsvButton.TabIndex = 8;
+            this.exportCsvButton.Text = "CSV";
+            this.exportCsvButton.UseVisualStyleBackColor = true;
+            this.exportCsvButton.Click += new System.EventHandler(this.exportCsvButton_Click);
             // 
             // columnsPanel
             // 
