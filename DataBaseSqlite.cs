@@ -30,6 +30,8 @@ namespace CheckPosition
                     if (this._connection.State != ConnectionState.Open) { MessageBox.Show("Ошибка соединения с БД "); }
                     // Проверяем и создаем таблицу аналитики, если ее еще нет
                     EnsureSiteAnalysisTableExists();
+                    // Проверяем и создаем таблицу результатов полного анализа
+                    EnsureSiteAnalysisResultTableExists();
                 }
                 catch (Exception ex)
                 {
@@ -520,6 +522,36 @@ namespace CheckPosition
             }
         }
 
+        // Проверяем, что таблица результатов полного анализа существует
+        private void EnsureSiteAnalysisResultTableExists()
+        {
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "CREATE TABLE IF NOT EXISTS site_analysis_result (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                        "site_id INTEGER NOT NULL, " +
+                        "parameter_name TEXT NOT NULL, " +
+                        "actual_value REAL, " +
+                        "median_value REAL, " +
+                        "deviation_percent REAL, " +
+                        "recommendation TEXT, " +
+                        "updated_at TEXT" +
+                        ");";
+                    command.ExecuteNonQuery();
+                }
+
+                using (var indexCommand = _connection.CreateCommand())
+                {
+                    indexCommand.CommandText = "CREATE INDEX IF NOT EXISTS idx_site_analysis_result_site_id ON site_analysis_result(site_id);";
+                    indexCommand.ExecuteNonQuery();
+                }
+            }
+        }
+
         // Загружаем список сайтов для анализа (URL и ключевая фраза)
         public List<SiteParserTarget> LoadSitesForAnalysis(List<long> siteIds)
         {
@@ -604,6 +636,176 @@ namespace CheckPosition
                 }
             }
             return table;
+        }
+
+        // Загружаем расширенные данные анализа для набора сайтов
+        public DataTable LoadAnalysisDataForSites(IReadOnlyList<long> siteIds)
+        {
+            if (siteIds == null || siteIds.Count == 0)
+            {
+                throw new ArgumentException("Список идентификаторов сайтов пуст.", nameof(siteIds));
+            }
+
+            var table = new DataTable();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    var parameterNames = new List<string>();
+                    for (int i = 0; i < siteIds.Count; i++)
+                    {
+                        string name = "$id" + i;
+                        parameterNames.Add(name);
+                        command.Parameters.AddWithValue(name, siteIds[i]);
+                    }
+
+                    command.CommandText =
+                        "SELECT site_id, strategy, " +
+                        "psi_perf_score, psi_seo_score, psi_bp_score, psi_a11y_score, psi_lcp_ms, psi_cls, psi_inp_ms, psi_tbt_ms, " +
+                        "psi_ttfb_ms, psi_fcp_ms, psi_si_ms, psi_bytes, psi_req_cnt, psi_unused_js_b, psi_unused_css_b, " +
+                        "psi_offscr_img_b, psi_modern_img_b, psi_opt_img_b, " +
+                        "word_total_words, word_total_sentences, word_total_paragraphs, word_total_words_in_paragraphs, " +
+                        "word_h1_count, word_h2_count, word_h3_count, word_h4_count, word_h5_count, word_total_words_in_headers, " +
+                        "word_total_words_in_title, word_total_words_in_description, word_image_count, word_inner_links, word_outer_links, " +
+                        "word_total_words_in_links, word_kw_words_count, word_kw_words_in_title, word_kw_words_in_description, " +
+                        "word_kw_words_in_headers, word_kw_words_in_alt, word_kw_words_in_text, word_tokens_ratio, word_kincaid_score, " +
+                        "word_flesch_reading_ease, word_gunning_fog, word_smog_index, word_ari, word_main_keyword_density " +
+                        $"FROM site_analysis_data WHERE site_id IN ({string.Join(", ", parameterNames)});";
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        table.Load(reader);
+                    }
+                }
+            }
+
+            return table;
+        }
+
+        // Получаем базовую информацию о сайте для аналитики
+        public SiteBasicInfo LoadSiteInfo(long siteId)
+        {
+            if (siteId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(siteId));
+            }
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT id, page_address, position_current FROM sites WHERE id = $siteId;";
+                    command.Parameters.AddWithValue("$siteId", siteId);
+
+                    using (var reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string pageAddress = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            int position = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                            return new SiteBasicInfo(id, pageAddress, position);
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        // Загружаем сайты с позициями в диапазоне 1..maxPosition для расчета медиан
+        public IReadOnlyList<SiteBasicInfo> LoadTopPositionSites(int maxPosition)
+        {
+            if (maxPosition <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxPosition));
+            }
+
+            var result = new List<SiteBasicInfo>();
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                using (var command = _connection.CreateCommand())
+                {
+                    command.CommandText =
+                        "SELECT id, page_address, position_current " +
+                        "FROM sites " +
+                        "WHERE position_current >= 1 AND position_current <= $maxPosition " +
+                        "ORDER BY position_current;";
+                    command.Parameters.AddWithValue("$maxPosition", maxPosition);
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+                            string pageAddress = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+                            int position = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
+                            result.Add(new SiteBasicInfo(id, pageAddress, position));
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Сохраняем рассчитанные результаты анализа для выбранного сайта
+        public void SaveSiteAnalysisResults(long siteId, IReadOnlyList<SiteAnalysisResultRow> rows)
+        {
+            if (siteId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(siteId));
+            }
+
+            if (rows == null)
+            {
+                throw new ArgumentNullException(nameof(rows));
+            }
+
+            lock (_dbSync)
+            {
+                EnsureConnectionOpen();
+                EnsureSiteAnalysisResultTableExists();
+
+                using (var transaction = _connection.BeginTransaction())
+                {
+                    using (var deleteCommand = _connection.CreateCommand())
+                    {
+                        deleteCommand.Transaction = transaction;
+                        deleteCommand.CommandText = "DELETE FROM site_analysis_result WHERE site_id = $siteId;";
+                        deleteCommand.Parameters.AddWithValue("$siteId", siteId);
+                        deleteCommand.ExecuteNonQuery();
+                    }
+
+                    using (var insertCommand = _connection.CreateCommand())
+                    {
+                        insertCommand.Transaction = transaction;
+                        insertCommand.CommandText =
+                            "INSERT INTO site_analysis_result (" +
+                            "site_id, parameter_name, actual_value, median_value, deviation_percent, recommendation, updated_at" +
+                            ") VALUES (" +
+                            "$siteId, $parameterName, $actualValue, $medianValue, $deviationPercent, $recommendation, $updatedAt" +
+                            ");";
+
+                        foreach (var row in rows)
+                        {
+                            insertCommand.Parameters.Clear();
+                            insertCommand.Parameters.AddWithValue("$siteId", siteId);
+                            insertCommand.Parameters.AddWithValue("$parameterName", row.ParameterName ?? string.Empty);
+                            insertCommand.Parameters.AddWithValue("$actualValue", row.ActualValue.HasValue ? (object)row.ActualValue.Value : DBNull.Value);
+                            insertCommand.Parameters.AddWithValue("$medianValue", row.MedianValue.HasValue ? (object)row.MedianValue.Value : DBNull.Value);
+                            insertCommand.Parameters.AddWithValue("$deviationPercent", row.DeviationPercent.HasValue ? (object)row.DeviationPercent.Value : DBNull.Value);
+                            insertCommand.Parameters.AddWithValue("$recommendation", row.Recommendation ?? string.Empty);
+                            insertCommand.Parameters.AddWithValue("$updatedAt", DateTimeOffset.Now.ToString("O"));
+                            insertCommand.ExecuteNonQuery();
+                        }
+                    }
+
+                    transaction.Commit();
+                }
+            }
         }
 
         // Добавляем пустые записи аналитики для сайтов, которых нет в таблице site_analysis_data по каждой стратегии
@@ -1109,5 +1311,41 @@ namespace CheckPosition
         public string Url { get; }
         public string Script { get; }
         public string Description { get; }
+    }
+
+    // Короткая модель для передачи базовой информации о сайте
+    public sealed class SiteBasicInfo
+    {
+        public SiteBasicInfo(long siteId, string pageUrl, int positionCurrent)
+        {
+            // Сохраняем информацию о сайте для дальнейших расчетов
+            SiteId = siteId;
+            PageUrl = pageUrl ?? string.Empty;
+            PositionCurrent = positionCurrent;
+        }
+
+        public long SiteId { get; }
+        public string PageUrl { get; }
+        public int PositionCurrent { get; }
+    }
+
+    // Модель строки результата полного анализа, сохраняемая в БД
+    public sealed class SiteAnalysisResultRow
+    {
+        public SiteAnalysisResultRow(string parameterName, double? actualValue, double? medianValue, double? deviationPercent, string recommendation)
+        {
+            // Сохраняем расчетные значения и рекомендации по метрике
+            ParameterName = parameterName ?? string.Empty;
+            ActualValue = actualValue;
+            MedianValue = medianValue;
+            DeviationPercent = deviationPercent;
+            Recommendation = recommendation ?? string.Empty;
+        }
+
+        public string ParameterName { get; }
+        public double? ActualValue { get; }
+        public double? MedianValue { get; }
+        public double? DeviationPercent { get; }
+        public string Recommendation { get; }
     }
 }

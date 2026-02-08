@@ -128,3 +128,15 @@ CREATE TABLE "site_analysis_data" (
 	"raw_json"	TEXT,
 	PRIMARY KEY("id" AUTOINCREMENT)
 )
+
+CREATE TABLE "site_analysis_result" (
+	"id"	INTEGER,
+	"site_id"	INTEGER NOT NULL,
+	"parameter_name"	TEXT NOT NULL,
+	"actual_value"	REAL,
+	"median_value"	REAL,
+	"deviation_percent"	REAL,
+	"recommendation"	TEXT,
+	"updated_at"	TEXT,
+	PRIMARY KEY("id" AUTOINCREMENT)
+)

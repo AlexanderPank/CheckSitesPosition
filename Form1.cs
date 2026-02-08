@@ -1972,5 +1972,27 @@ namespace CheckPosition
             MessageBox.Show(report, "Инфа", MessageBoxButtons.OK, MessageBoxIcon.Information);
             
         }
+
+        private void fullAnalysisMenuItem_Click(object sender, EventArgs e)
+        {
+            // Открываем форму полного анализа для выбранного сайта
+            if (dg.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Выберите сайт для анализа.");
+                return;
+            }
+
+            long siteId = getIngValue(dg.SelectedRows[0].Cells[colID.Index].Value, -1);
+            if (siteId <= 0)
+            {
+                MessageBox.Show("Не удалось определить ID сайта.");
+                return;
+            }
+
+            using (var form = new AnalysisDataResult(database, siteId))
+            {
+                form.ShowDialog(this);
+            }
+        }
     }
 }
