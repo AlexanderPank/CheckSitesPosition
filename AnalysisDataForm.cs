@@ -98,14 +98,14 @@ namespace CheckPosition
         private async void checkSelectedButton_Click(object sender, EventArgs e)
         {
             // Проверяем только выбранную строку с учетом скрытого идентификатора сайта
-            long siteId = GetSelectedSiteId();
-            if (siteId <= 0)
+            List<long> siteIds = GetSelectedSiteIds();
+            if (siteIds.Count <= 0)
             {
                 MessageBox.Show("Выберите строку для проверки.");
                 return;
             }
 
-            var targets = _database.LoadSitesForAnalysis(new[] { siteId });
+            var targets = _database.LoadSitesForAnalysis(siteIds);
             await RunAnalysisAsync(targets).ConfigureAwait(true);
         }
 
@@ -464,21 +464,27 @@ namespace CheckPosition
             return string.Equals(stringValue?.Trim(), "-1", StringComparison.Ordinal);
         }
 
-        private long GetSelectedSiteId()
+        private List<long> GetSelectedSiteIds()
         {
+            List<long> siteIds = new List<long>();
             // Получаем идентификатор сайта из скрытого столбца
             if (analysisGrid.CurrentRow == null)
             {
-                return 0;
+                return siteIds;
             }
 
             if (!analysisGrid.Columns.Contains("site_id"))
             {
-                return 0;
+                return siteIds;
             }
+          
 
-            object rawValue = analysisGrid.CurrentRow.Cells["site_id"].Value;
-            return Helper.getIngValue(rawValue, 0);
+            foreach (DataGridViewRow row in analysisGrid.SelectedRows)
+            {
+                object rawValue = row.Cells["site_id"].Value;
+                siteIds.Add(Helper.getIngValue(rawValue, 0));
+            }
+            return siteIds;
         }
 
         private void FindAndSelectRow(string query)
@@ -689,7 +695,8 @@ namespace CheckPosition
             if (errors.Count > 0)
             {
                 MessageBox.Show("При проверке возникли ошибки:\n" + string.Join("\n", errors.Take(10)));
-            }
+            } else
+                MessageBox.Show("Проверка окончена без ошибок");
         }
 
         private void ToggleButtons(bool enabled)

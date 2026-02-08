@@ -521,7 +521,7 @@ namespace CheckPosition
         }
 
         // Загружаем список сайтов для анализа (URL и ключевая фраза)
-        public List<SiteParserTarget> LoadSitesForAnalysis(IReadOnlyCollection<long> siteIds)
+        public List<SiteParserTarget> LoadSitesForAnalysis(List<long> siteIds)
         {
             var result = new List<SiteParserTarget>();
             lock (_dbSync)
@@ -555,7 +555,7 @@ namespace CheckPosition
                             long id = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
                             string pageAddress = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
                             string query = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
-                            result.Add(new SiteParserTarget(id, pageAddress, query));
+                            result.Add(new SiteParserTarget(id,  pageAddress, query));
                         }
                     }
                 }
