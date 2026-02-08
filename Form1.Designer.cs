@@ -88,6 +88,7 @@
             this.od = new System.Windows.Forms.OpenFileDialog();
             this.toolStripMenuItem5 = new System.Windows.Forms.ToolStripSeparator();
             this.tecknicalCheck = new System.Windows.Forms.ToolStripMenuItem();
+            this.fullAnalysisMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.contextMenuTreeView.SuspendLayout();
             this.panel2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dg)).BeginInit();
@@ -100,6 +101,7 @@
             this.contextMenuTreeView.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.checkRow,
             this.tecknicalCheck,
+            this.fullAnalysisMenuItem,
             this.toolStripMenuItem5,
             this.determineHostingContextMenuItem,
             this.determineCpaContextMenuItem,
@@ -554,6 +556,13 @@
             this.tecknicalCheck.Text = "Проверить техническе ошибки сайта ";
             this.tecknicalCheck.Click += new System.EventHandler(this.tecknicalCheck_Click);
             // 
+            // fullAnalysisMenuItem
+            // 
+            this.fullAnalysisMenuItem.Name = "fullAnalysisMenuItem";
+            this.fullAnalysisMenuItem.Size = new System.Drawing.Size(283, 22);
+            this.fullAnalysisMenuItem.Text = "Полный анализ сайта";
+            this.fullAnalysisMenuItem.Click += new System.EventHandler(this.fullAnalysisMenuItem_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 14F);
@@ -641,6 +650,7 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingId;
         private System.Windows.Forms.DataGridViewTextBoxColumn colHostingName;
         private System.Windows.Forms.ToolStripMenuItem tecknicalCheck;
+        private System.Windows.Forms.ToolStripMenuItem fullAnalysisMenuItem;
         private System.Windows.Forms.ToolStripSeparator toolStripMenuItem5;
     }
 }
